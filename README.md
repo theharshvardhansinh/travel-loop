@@ -28,7 +28,7 @@
 | ✅ **Packing Checklist** | AI-generated packing suggestions by category with interactive checkboxes |
 | 💬 **AI Chat Assistant** | Context-aware travel chatbot powered by Gemini |
 | 📅 **Export & Share** | PDF print, ICS calendar export, shareable trip links |
-| 🔐 **Auth & Cloud Sync** | Supabase Auth (magic link / Google OAuth) with localStorage fallback |
+| 🔐 **Auth & Cloud Sync** | MongoDB & JWT Authentication with reactive client-side persistence |
 | 🎨 **Glassmorphism UI** | Modern, responsive design with Framer Motion animations |
 | 🌐 **Currency Converter** | Offline currency converter with hardcoded rates |
 | 🕐 **World Clock** | Multi-timezone clock display |
@@ -47,8 +47,11 @@
 | **AI / LLM** | Google Gemini 2.5 Flash API |
 | **Travel Data** | SerpAPI (Google Flights, Hotels, Maps) |
 | **Weather** | Open-Meteo (free, no API key) |
-| **Database & Auth** | Supabase (PostgreSQL + RLS) |
+| **Database & Auth** | MongoDB (Mongoose ODM) + JWT Auth |
 | **Caching** | Upstash Redis |
+
+---
+
 ## 📁 Project Structure
 
 ```
@@ -63,6 +66,12 @@ TripMitra/
 │   │   │   │   ├── 🌤️ weather-advice/   # AI weather/clothing tips
 │   │   │   │   ├── ✅ packing-suggestions/  # AI packing list generator
 │   │   │   │   └── 📍 suggest-stop/     # AI activity suggestions
+│   │   │   ├── 📂 auth/                 # MongoDB authentication routes
+│   │   │   │   ├── 🔑 login/
+│   │   │   │   ├── 📝 register/
+│   │   │   │   ├── 👤 me/
+│   │   │   │   └── 🚪 logout/
+│   │   │   ├── 📂 trips/                # MongoDB trips CRUD routes
 │   │   │   ├── 📂 travel/               # Travel comparison services
 │   │   │   │   ├── ✈️ flights/          # Google Flights search
 │   │   │   │   ├── 🏨 hotels/           # Google Hotels search
@@ -72,9 +81,11 @@ TripMitra/
 │   │   │   ├── 🗺️ geocode/              # Place → coordinates
 │   │   │   ├── 🌤️ weather/              # Forecast & historical data
 │   │   │   ├── 🖼️ search-images/        # Destination images
-│   │   │   └── 🔍 check-border/          # Cross-border detection
+│   │   │   └── 🔍 check-border/         # Cross-border detection
 │   │   ├── 📂 budget/[id]/              # Budget ledger page
 │   │   ├── 📂 planner/[id]/             # Main trip planner (3-column)
+│   │   ├── 📂 login/                    # Login page
+│   │   ├── 📂 register/                 # Registration page
 │   │   ├── 📄 page.tsx                  # Homepage
 │   │   ├── 📄 layout.tsx                # Root layout + BottomDock nav
 │   │   ├── 🎨 globals.css               # Glassmorphism design system
@@ -87,6 +98,7 @@ TripMitra/
 │   │   ├── 🖼️ ImageWithFallback.tsx     # Image with skeleton fallback
 │   │   ├── 🗺️ Map.tsx                   # Leaflet interactive map
 │   │   └── 🕐 WorldClock.tsx            # Multi-timezone clock
+│   ├── 📂 models/                       # Mongoose Schemas (User, Trip)
 │   ├── 📂 types/
 │   │   └── 📄 trip.ts                   # Unified types definitions
 │   └── 📂 lib/
@@ -94,10 +106,9 @@ TripMitra/
 │       ├── 🤖 gemini.ts                 # callGemini AI caller
 │       ├── ✈️ serpapi.ts                # callSerpApi search caller
 │       ├── 🗄️ redis.ts                  # Upstash Redis client
-│       ├── 🗃️ store.ts                  # State management + localStorage/Supabase
-│       └── 🔌 supabaseClient.ts         # Supabase client init
-├── 📂 supabase/
-│   └── 📄 schema.sql                    # 11 tables + RLS + triggers
+│       ├── 🍃 mongoose.ts               # MongoDB Mongoose connection
+│       ├── 🔐 auth.ts                   # JWT session helper
+│       └── 🗃️ store.ts                  # State management + MongoDB sync
 ├── 📂 public/
 │   └── 📄 manifest.json                 # Web app manifest
 ├── 📄 .env.example                      # Environment variables template
@@ -116,6 +127,7 @@ TripMitra/
 
 - **Node.js** 18+ (recommended: 20 LTS)
 - **npm** or **yarn** or **pnpm**
+- **MongoDB** (Local instance or [MongoDB Atlas](https://www.mongodb.com/atlas/database) connection URI)
 - A **Google Gemini API key** (free tier available at [Google AI Studio](https://aistudio.google.com/))
 - A **SerpAPI key** (free 100 searches/month at [serpapi.com](https://serpapi.com/))
 
@@ -134,18 +146,17 @@ npm install
 
 ```bash
 # Copy the example env file
-cp .env.example .env
+cp .env.example .env.local
 ```
 
-Then edit `.env` and fill in your API keys:
+Then edit `.env.local` and fill in your API keys and MongoDB URI:
 
 ```env
 GEMINI_API_KEY=your_gemini_api_key_here
 SERP_API_KEY=your_serp_api_key_here
-PORT=3000
+MONGODB_URI=mongodb+srv://username:password@cluster.mongodb.net/tripmitra?retryWrites=true&w=majority
+JWT_SECRET=your_jwt_secret_key
 ```
-
-> ⚠️ **Supabase & Upstash Redis** are optional. The app runs in **offline/local mode** using `localStorage` without them. To enable cloud features, add the Supabase and Upstash variables as shown in `.env.example`.
 
 ### 3️⃣ Run the Development Server
 
@@ -165,30 +176,6 @@ npm run build
 # Start the production server
 npm start
 ```
-
-### Other Commands
-
-```bash
-# Lint the codebase
-npm run lint
-```
-
----
-
-## 🗄️ Supabase Database Setup (Optional)
-
-1. Create a project at [supabase.com](https://supabase.com/)
-2. Go to **SQL Editor** and paste the contents of `supabase/schema.sql`
-3. Copy your project URL and anon key from **Settings → API**
-4. Add them to `.env`:
-
-```env
-NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
-SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
-```
-
----
 
 ---
 

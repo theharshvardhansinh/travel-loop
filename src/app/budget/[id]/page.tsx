@@ -877,6 +877,57 @@ export default function BudgetPage() {
 
       </div>
 
+      {/* ADD MEMBER MODAL */}
+      <AnimatePresence>
+        {showAddMemberModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/40 backdrop-blur-sm p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden"
+            >
+              <div className="px-5 py-4 border-b border-gray-150 flex items-center justify-between">
+                <h3 className="text-sm font-bold font-display uppercase tracking-wider text-gray-800 flex items-center gap-2">
+                  <UserPlus className="w-4 h-4 text-teal-600" />
+                  Add Ledger Member
+                </h3>
+                <button
+                  onClick={() => setShowAddMemberModal(false)}
+                  className="p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+              <form onSubmit={handleAddMember} className="p-5">
+                <p className="text-[11px] text-gray-500 mb-4 leading-relaxed">
+                  Add a custom name to the ledger to split expenses with them. This dynamically updates the split options and settlement calculations.
+                </p>
+                <div className="space-y-3">
+                  <div>
+                    <label className="text-[10px] text-gray-400 font-bold uppercase tracking-wider block mb-1">Traveler Name</label>
+                    <input
+                      type="text"
+                      value={newMemberName}
+                      onChange={(e) => setNewMemberName(e.target.value)}
+                      placeholder="e.g. Priya, Rohit..."
+                      required
+                      autoFocus
+                      className="w-full border border-gray-200 px-3.5 py-2.5 rounded-xl text-xs placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500"
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    className="w-full py-2.5 rounded-xl bg-teal-600 hover:bg-teal-500 font-bold text-xs text-white transition-colors mt-2"
+                  >
+                    Add Member
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
     </div>
   );

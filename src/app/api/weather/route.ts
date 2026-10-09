@@ -21,8 +21,11 @@ export async function GET(request: Request) {
     // Fetch 16-day forecast
     let forecastData = null;
     try {
-      const forecastUrl = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max,wind_speed_10m_max,uv_index_max,relative_humidity_2m_max,precipitation_sum&current_weather=true&timezone=auto&forecast_days=16`;
+      // Keep to documented daily variables. Unsupported fields make Open-Meteo
+      // reject the whole request with a 400 instead of returning a partial forecast.
+      const forecastUrl = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max,wind_speed_10m_max,uv_index_max,precipitation_sum&current_weather=true&timezone=auto&forecast_days=16`;
       const forecastRes = await fetchWithTimeout(forecastUrl, 8000);
+      if (!forecastRes.ok) throw new Error(`Open-Meteo forecast returned ${forecastRes.status}`);
       forecastData = await forecastRes.json();
     } catch (forecastErr) {
       console.error("Forecast fetch error:", forecastErr);
@@ -42,6 +45,7 @@ export async function GET(request: Request) {
 
         const archiveUrl = `https://archive-api.open-meteo.com/v1/archive?latitude=${lat}&longitude=${lng}&start_date=${startStr}&end_date=${endStr}&daily=temperature_2m_max,temperature_2m_min,precipitation_sum&timezone=auto`;
         const archiveRes = await fetchWithTimeout(archiveUrl, 5000);
+        if (!archiveRes.ok) throw new Error(`Open-Meteo archive returned ${archiveRes.status}`);
         historicalData = await archiveRes.json();
       } catch (histErr) {
         console.error("Historical data fetch error:", histErr);

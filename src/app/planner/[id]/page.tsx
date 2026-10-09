@@ -7,7 +7,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { 
   Calendar, Users, MapPin, Plus, Trash2, Edit3, ChevronDown, ChevronUp,
   CloudSun, Briefcase, DollarSign, Navigation, Hotel, PlusCircle, ArrowUpDown,
-  Sparkles, MessageSquare, Send, Globe
+  Sparkles, MessageSquare, Send, Globe, UserPlus, Mail, X, Check, UserCheck
 } from "lucide-react";
 import { useActiveTrip, TripActivity, updateTripRecord } from "@/lib/store";
 import ExportButtons from "@/components/ExportButtons";
@@ -15,6 +15,7 @@ import AIChatAssistant from "@/components/AIChatAssistant";
 import ImageWithFallback from "@/components/ImageWithFallback";
 import TripHeader from "@/components/TripHeader";
 import ScrollReveal from "@/components/ScrollReveal";
+import ItineraryMindMap from "@/components/ItineraryMindMap";
 import { requestAndSchedule } from "@/lib/notificationScheduler";
 
 // Dynamic Import for Leaflet Map to avoid SSR 'window is not defined' compilation errors
@@ -34,6 +35,7 @@ export default function PlannerPage() {
 
   const {
     trip,
+    user,
     addActivity,
     editActivity,
     deleteActivity,
@@ -45,12 +47,20 @@ export default function PlannerPage() {
     updateActivities,
     addDay,
     deleteDay,
+    syncState,
   } = useActiveTrip(tripId);
 
   // Active UI States
   const [activeDay, setActiveDay] = useState(1);
+  const [plannerView, setPlannerView] = useState<"itinerary" | "mindmap" | "map">("itinerary");
   const [expandedDays, setExpandedDays] = useState<Record<number, boolean>>({ 1: true });
-  const [activeSidebarTab, setActiveSidebarTab] = useState<"places" | "weather" | "deals" | "assistant">("places");
+  const [activeSidebarTab, setActiveSidebarTab] = useState<"places" | "weather" | "deals" | "assistant" | "team">("places");
+
+  // Co-Traveler states
+  const [coTravelerEmail, setCoTravelerEmail] = useState("");
+  const [isInviting, setIsInviting] = useState(false);
+  const [inviteMessage, setInviteMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [removingEmail, setRemovingEmail] = useState<string | null>(null);
 
   // Stops Modals
   const [showAddModal, setShowAddModal] = useState(false);
@@ -522,11 +532,29 @@ export default function PlannerPage() {
       {/* HEADER CONTROLS */}
       <TripHeader trip={trip} isInternational={isInternational} />
 
+      {/* The itinerary remains the source of truth; these are presentation layers. */}
+      <div className="mb-5 flex w-fit items-center gap-1 rounded-xl border border-gray-200 bg-white p-1 shadow-sm">
+        {([
+          ["itinerary", "Itinerary"],
+          ["mindmap", "Mind Map"],
+          ["map", "Map"],
+        ] as const).map(([view, label]) => (
+          <button
+            key={view}
+            type="button"
+            onClick={() => setPlannerView(view)}
+            className={`rounded-lg px-3 py-2 text-xs font-bold transition-all ${plannerView === view ? "bg-teal-600 text-white shadow-sm" : "text-gray-500 hover:bg-gray-50 hover:text-gray-800"}`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
       {/* THREE COLUMN WORKSPACE */}
-      <div className="grid grid-cols-1 lg:grid-cols-[30%_45%_25%] gap-6 min-h-[70vh]">
+      <div className={`grid grid-cols-1 gap-6 min-h-[70vh] ${plannerView === "mindmap" ? "lg:grid-cols-1" : "lg:grid-cols-[30%_45%_25%]"}`}>
         
         {/* COLUMN 1: DAY TIMELINE FEED */}
-        <div className="flex flex-col gap-4">
+        <div className={plannerView === "mindmap" ? "hidden" : "flex flex-col gap-4"}>
           <div className="flex items-center justify-between">
             <h2 className="text-sm font-bold font-display uppercase tracking-wider text-gray-500">Day Timeline</h2>
             <span className="text-[10px] text-gray-400">Click day tab to focus map</span>
@@ -781,22 +809,26 @@ export default function PlannerPage() {
           </div>
         </div>
 
-        {/* COLUMN 2: LEAFLET INTERACTIVE ROUTING MAP */}
-        <div className="h-[400px] lg:h-auto min-h-[400px] lg:max-h-[70vh]">
-          <Map 
-            activities={activeDayActivities} 
-            destination={trip.destination} 
-            centerCoords={
-              activeDayActivities[0]?.lat && activeDayActivities[0]?.lng
-                ? { lat: activeDayActivities[0].lat, lng: activeDayActivities[0].lng }
-                : null
-            }
-            isGeocoding={isGeocoding}
-          />
+        {/* COLUMN 2: derived visual layers — each reads the same itinerary JSON */}
+        <div className={plannerView === "mindmap" ? "min-h-[680px]" : "h-[400px] lg:h-auto min-h-[400px] lg:max-h-[70vh]"}>
+          {plannerView === "mindmap" ? (
+            <ItineraryMindMap trip={trip} />
+          ) : (
+            <Map 
+              activities={activeDayActivities} 
+              destination={trip.destination} 
+              centerCoords={
+                activeDayActivities[0]?.lat && activeDayActivities[0]?.lng
+                  ? { lat: activeDayActivities[0].lat, lng: activeDayActivities[0].lng }
+                  : null
+              }
+              isGeocoding={isGeocoding}
+            />
+          )}
         </div>
 
         {/* COLUMN 3: SIDEBAR UTILITIES TABS */}
-        <div id="sidebar-utilities-container" className="flex flex-col gap-4 max-h-[70vh]">
+        <div id="sidebar-utilities-container" className={plannerView === "mindmap" ? "hidden" : "flex flex-col gap-4 max-h-[70vh]"}>
           {/* Sidebar Tab Header */}
           <div className="flex items-stretch gap-1.5 p-1 rounded-xl bg-gray-50 border border-gray-250 text-xs font-bold w-full">
             <button
@@ -830,6 +862,17 @@ export default function PlannerPage() {
  }`}
             >
               AI Help
+            </button>
+            <button
+              onClick={() => setActiveSidebarTab("team")}
+              className={`flex-1 py-1.5 rounded-lg text-center text-[10px] whitespace-nowrap transition-all ${
+ activeSidebarTab === "team" ? "bg-white text-teal-600 shadow-sm border border-teal-200" : "text-gray-400 hover:text-gray-800"
+ } relative`}
+            >
+              Team
+              {(trip?.collaborators?.filter((c: any) => c.status === "pending").length ?? 0) > 0 && (
+                <span className="absolute top-0.5 right-1 w-1.5 h-1.5 bg-teal-500 rounded-full" />
+              )}
             </button>
           </div>
 
@@ -871,6 +914,172 @@ export default function PlannerPage() {
               </div>
             </div>
           )}
+
+          {/* TAB 5: CO-TRAVELERS / TEAM */}
+          {activeSidebarTab === "team" && (() => {
+            const isOwner = user && trip && trip.userId === user.id;
+            const collaborators: any[] = trip?.collaborators || [];
+
+            const handleInvite = async (e: React.FormEvent) => {
+              e.preventDefault();
+              if (!coTravelerEmail.trim()) return;
+              setIsInviting(true);
+              setInviteMessage(null);
+              try {
+                const res = await fetch(`/api/trips/${tripId}/collaborators`, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ email: coTravelerEmail.trim() }),
+                });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || "Failed to send invitation");
+                setInviteMessage({ type: "success", text: `Invitation sent to ${coTravelerEmail.trim()}!` });
+                setCoTravelerEmail("");
+                syncState();
+              } catch (err: any) {
+                setInviteMessage({ type: "error", text: err.message || "Failed to send invitation" });
+              } finally {
+                setIsInviting(false);
+              }
+            };
+
+            const handleRemove = async (email: string) => {
+              if (!confirm(`Remove ${email} from this trip?`)) return;
+              setRemovingEmail(email);
+              try {
+                const res = await fetch(`/api/trips/${tripId}/collaborators`, {
+                  method: "DELETE",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ email }),
+                });
+                if (!res.ok) {
+                  const data = await res.json();
+                  throw new Error(data.error || "Failed to remove co-traveler");
+                }
+                syncState();
+              } catch (err: any) {
+                alert(err.message);
+              } finally {
+                setRemovingEmail(null);
+              }
+            };
+
+            return (
+              <div className="flex-1 overflow-y-auto space-y-4 pr-1 text-left">
+                {/* Team Header */}
+                <div className="p-4 rounded-xl border border-gray-200 bg-white shadow-sm">
+                  <h3 className="text-xs font-bold text-gray-700 uppercase tracking-wide mb-1 flex items-center gap-1.5">
+                    <Users className="w-3.5 h-3.5 text-teal-600" />
+                    Co-Travelers
+                  </h3>
+                  <p className="text-[9px] text-gray-400 mb-3">
+                    {isOwner
+                      ? "Invite people by email. They will see this trip in their dashboard after accepting."
+                      : "People sharing this trip."}
+                  </p>
+
+                  {/* Collaborator list */}
+                  <div className="space-y-2 mb-3">
+                    {collaborators.length === 0 ? (
+                      <p className="text-[10px] text-gray-400 italic text-center py-2">No co-travelers yet.</p>
+                    ) : (
+                      collaborators.map((collab: any, idx: number) => (
+                        <div key={collab.email || idx} className="flex items-center justify-between p-2.5 rounded-lg bg-gray-50 border border-gray-100">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <div className={`w-7 h-7 rounded-full flex-shrink-0 flex items-center justify-center text-white text-[10px] font-black ${
+                              collab.status === "accepted" ? "bg-teal-600" :
+                              collab.status === "declined" ? "bg-gray-400" : "bg-amber-500"
+                            }`}>
+                              {(collab.name || collab.email || "?")[0].toUpperCase()}
+                            </div>
+                            <div className="min-w-0">
+                              <p className="text-[10px] font-bold text-gray-800 truncate">{collab.name || collab.email}</p>
+                              {collab.name && <p className="text-[9px] text-gray-400 truncate">{collab.email}</p>}
+                              <span className={`inline-block text-[8px] font-extrabold uppercase tracking-wide px-1.5 py-0.5 rounded-full mt-0.5 ${
+                                collab.status === "accepted" ? "bg-teal-100 text-teal-700" :
+                                collab.status === "declined" ? "bg-gray-100 text-gray-500" : "bg-amber-100 text-amber-700"
+                              }`}>
+                                {collab.status === "accepted" ? "✓ Joined" : collab.status === "declined" ? "✗ Declined" : "⏳ Pending"}
+                              </span>
+                            </div>
+                          </div>
+                          {isOwner && (
+                            <button
+                              type="button"
+                              disabled={removingEmail === collab.email}
+                              onClick={() => handleRemove(collab.email)}
+                              className="p-1 rounded hover:bg-red-50 text-gray-300 hover:text-red-500 transition-colors flex-shrink-0 ml-1"
+                              title="Remove co-traveler"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
+                      ))
+                    )}
+                  </div>
+
+                  {/* Invite form — only for owner */}
+                  {isOwner && (
+                    <form onSubmit={handleInvite} className="flex flex-col gap-2">
+                      <div className="flex gap-1.5">
+                        <div className="relative flex-1">
+                          <Mail className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-gray-400" />
+                          <input
+                            type="email"
+                            value={coTravelerEmail}
+                            onChange={(e) => setCoTravelerEmail(e.target.value)}
+                            placeholder="friend@email.com"
+                            className="w-full glass-input pl-7 pr-2 py-1.5 rounded-lg text-[10px] focus:outline-none"
+                            required
+                          />
+                        </div>
+                        <button
+                          type="submit"
+                          disabled={isInviting || !coTravelerEmail.trim()}
+                          className="px-3 py-1.5 rounded-lg bg-teal-600 hover:bg-teal-700 disabled:opacity-50 text-white text-[10px] font-bold flex items-center gap-1 transition-colors flex-shrink-0"
+                        >
+                          {isInviting ? (
+                            <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                          ) : (
+                            <UserPlus className="w-3 h-3" />
+                          )}
+                          <span>Invite</span>
+                        </button>
+                      </div>
+                      {inviteMessage && (
+                        <motion.p
+                          initial={{ opacity: 0, y: -4 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          className={`text-[9px] font-bold px-2 py-1 rounded-lg ${
+                            inviteMessage.type === "success"
+                              ? "bg-teal-50 text-teal-700 border border-teal-200"
+                              : "bg-red-50 text-red-600 border border-red-200"
+                          }`}
+                        >
+                          {inviteMessage.type === "success" ? "✓" : "✗"} {inviteMessage.text}
+                        </motion.p>
+                      )}
+                    </form>
+                  )}
+                </div>
+
+                {/* Trip owner info */}
+                <div className="p-3 rounded-xl border border-gray-100 bg-gray-50 text-left">
+                  <p className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-1">Trip Owner</p>
+                  <div className="flex items-center gap-2">
+                    <div className="w-7 h-7 rounded-full bg-gradient-to-br from-teal-600 to-emerald-600 text-white text-[10px] font-black flex items-center justify-center flex-shrink-0">
+                      {user?.name?.[0]?.toUpperCase() || user?.email?.[0]?.toUpperCase() || "O"}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-[10px] font-bold text-gray-800 truncate">{user?.name || "Trip Creator"}</p>
+                      {isOwner && <p className="text-[9px] text-teal-600 font-semibold">You (owner)</p>}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
 
           {/* TAB 2: WEATHER */}
           {activeSidebarTab === "weather" && (

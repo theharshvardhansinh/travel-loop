@@ -37,6 +37,7 @@ export const CITY_AIRPORT_MAP: Record<string, string> = {
   'gwalior': 'GWL',
   'shillong': 'SHL',
   'gangtok': 'IXB',
+  'darjeeling': 'IXB', 'dargiling': 'IXB',
   'leh': 'IXL',
   'jodhpur': 'JDH',
   'jaisalmer': 'JSA',
@@ -220,6 +221,8 @@ export const CITY_COORDS: Record<string, { lat: number; lng: number }> = {
   'udaipur': { lat: 24.5854, lng: 73.7125 },
   'pondicherry': { lat: 11.9139, lng: 79.8145 },
   'darjeeling': { lat: 27.0360, lng: 88.2627 },
+  // Common phonetic misspelling used in trip searches.
+  'dargiling': { lat: 27.0360, lng: 88.2627 },
   'shimla': { lat: 31.1048, lng: 77.1734 },
   'mysore': { lat: 12.2958, lng: 76.6394 },
   'coimbatore': { lat: 11.0168, lng: 76.9558 },
@@ -295,7 +298,7 @@ export async function resolveAirportCode(input: string): Promise<string> {
   const apiKey = process.env.GEMINI_API_KEY;
   if (apiKey) {
     try {
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${apiKey}`;
       const response = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },

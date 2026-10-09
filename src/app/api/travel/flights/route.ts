@@ -109,7 +109,10 @@ export async function GET(request: Request) {
     }
 
     const data = await callSerpApi(params);
-    if (data && data.best_flights) {
+    if (data && (data.best_flights || data.other_flights)) {
+      if (!data.best_flights && data.other_flights) {
+        data.best_flights = data.other_flights;
+      }
       await setCached(cacheKey, data, 86400); // Cache for 24 hours
       return NextResponse.json(data);
     }

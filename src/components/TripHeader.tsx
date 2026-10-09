@@ -103,23 +103,42 @@ export default function TripHeader({ trip, isInternational }: TripHeaderProps) {
 
   const handleSendEmailInvite = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newCollabEmail.trim()) return;
+    const cleanEmail = newCollabEmail.trim().toLowerCase();
+    if (!cleanEmail) return;
 
     setIsSendingEmail(true);
-    // Simulate sending email
-    await new Promise((resolve) => setTimeout(resolve, 1500));
+    
+    const existingCollabs = trip.collaborators || [];
+    const collabExists = existingCollabs.some((c) => c.email?.toLowerCase().trim() === cleanEmail);
+    const updatedCollabs = collabExists
+      ? existingCollabs
+      : [
+          ...existingCollabs,
+          {
+            email: cleanEmail,
+            name: cleanEmail.split("@")[0],
+            status: "pending" as const,
+            invitedAt: new Date().toISOString(),
+          },
+        ];
+
+    const existingEmails = trip.collaboratorEmails || [];
+    const updatedEmails = existingEmails.includes(cleanEmail) ? existingEmails : [...existingEmails, cleanEmail];
+
+    await updateTripRecord({
+      ...trip,
+      collaboratorEmails: updatedEmails,
+      collaborators: updatedCollabs,
+    });
+
     setIsSendingEmail(false);
     setEmailSentSuccess(true);
-    
-    // Automatically add to active collaborators stack as an example of integration
-    const username = newCollabEmail.split("@")[0];
-    await handleAddCollab(username);
 
     setTimeout(() => {
       setEmailSentSuccess(false);
       setNewCollabEmail("");
       setShowInviteModal(false);
-    }, 2000);
+    }, 1500);
   };
 
   const handleCopyInviteLink = () => {

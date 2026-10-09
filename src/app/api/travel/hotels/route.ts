@@ -12,8 +12,32 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Missing required parameters" }, { status: 400 });
   }
 
+  const requestedCheckIn = new Date(`${check_in_date}T00:00:00Z`);
+  const requestedCheckOut = new Date(`${check_out_date}T00:00:00Z`);
+  if (Number.isNaN(requestedCheckIn.getTime()) || Number.isNaN(requestedCheckOut.getTime())) {
+    return NextResponse.json({ error: "Invalid hotel dates" }, { status: 400 });
+  }
+
+  // Google Hotels rejects past dates. Keep the requested stay length, but make
+  // a live availability search for a future window when viewing an old trip.
+  const today = new Date();
+  today.setUTCHours(0, 0, 0, 0);
+  const stayNights = Math.max(1, Math.round((requestedCheckOut.getTime() - requestedCheckIn.getTime()) / 86400000));
+  let effectiveCheckIn = requestedCheckIn;
+  let effectiveCheckOut = requestedCheckOut;
+  if (requestedCheckIn <= today) {
+    effectiveCheckIn = new Date(today);
+    effectiveCheckIn.setUTCDate(effectiveCheckIn.getUTCDate() + 14);
+    effectiveCheckOut = new Date(effectiveCheckIn);
+    effectiveCheckOut.setUTCDate(effectiveCheckOut.getUTCDate() + stayNights);
+    console.info(`[Hotels] Past trip dates replaced with next available search window for ${q}.`);
+  }
+  const formatDate = (value: Date) => value.toISOString().slice(0, 10);
+  const effectiveCheckInDate = formatDate(effectiveCheckIn);
+  const effectiveCheckOutDate = formatDate(effectiveCheckOut);
+
   // 1. Cache Lookup
-  const cacheKey = `tripmitra:hotels:${q.toLowerCase().trim()}:${check_in_date}:${check_out_date}`;
+  const cacheKey = `tripmitra:hotels:${q.toLowerCase().trim()}:${effectiveCheckInDate}:${effectiveCheckOutDate}`;
   try {
     const cachedHotels = await getCached<any>(cacheKey);
     if (cachedHotels) {
@@ -50,8 +74,8 @@ export async function GET(request: Request) {
     const data = await callSerpApi({
       engine: "google_hotels",
       q,
-      check_in_date,
-      check_out_date,
+      check_in_date: effectiveCheckInDate,
+      check_out_date: effectiveCheckOutDate,
       currency: "INR",
       hl: "en"
     });

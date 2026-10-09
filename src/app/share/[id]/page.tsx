@@ -62,12 +62,27 @@ export default function SharePage() {
     };
 
     const currentNames = getTravellerNames(trip);
-    const updatedNames = [...currentNames, collabName.trim()];
+    const updatedNames = currentNames.includes(collabName.trim()) ? currentNames : [...currentNames, collabName.trim()];
+
+    let updatedEmails = trip.collaboratorEmails || [];
+    try {
+      const authRes = await fetch("/api/auth/me");
+      if (authRes.ok) {
+        const authData = await authRes.json();
+        if (authData?.user?.email) {
+          const userEmail = authData.user.email.toLowerCase().trim();
+          if (!updatedEmails.includes(userEmail)) {
+            updatedEmails = [...updatedEmails, userEmail];
+          }
+        }
+      }
+    } catch {}
 
     await updateTripRecord({
       ...trip,
       travelers: updatedNames.length,
-      travellerNames: updatedNames
+      travellerNames: updatedNames,
+      collaboratorEmails: updatedEmails,
     });
 
     setIsJoining(false);

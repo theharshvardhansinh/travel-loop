@@ -8,6 +8,18 @@ export interface TripActivity {
   imageUrl?: string;
   rating?: number;
   notes?: string;
+  // Optional itinerary enrichment supplied by the AI / routing provider.
+  // The mind map consumes these directly when present; no separate map dataset.
+  openingHours?: string;
+  estimatedVisitDuration?: string;
+  distanceFromPrevious?: string;
+  travelTimeFromPrevious?: string;
+  transportType?: string;
+  price?: string | number;
+  cuisine?: string;
+  location?: string;
+  checkIn?: string;
+  checkOut?: string;
 }
 
 export interface TripDay {
@@ -36,8 +48,19 @@ export interface PackingItem {
   checked: boolean;
 }
 
+export interface TripCollaborator {
+  id?: string;
+  email: string;
+  userId?: string;
+  name?: string;
+  status: "pending" | "accepted" | "declined";
+  invitedAt?: string;
+  respondedAt?: string;
+}
+
 export interface Trip {
   id: string;
+  userId?: string;
   destination: string;
   originCity: string;
   startDate: string;
@@ -48,5 +71,8 @@ export interface Trip {
   expenses: TripExpense[];
   packingList: PackingItem[];
   travellerNames?: string[];
+  collaboratorEmails?: string[];
+  collaboratorUserIds?: string[];
+  collaborators?: TripCollaborator[];
   createdAt: string;
 }

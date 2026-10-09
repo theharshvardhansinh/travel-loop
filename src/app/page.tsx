@@ -6,13 +6,14 @@ import { motion, AnimatePresence, useScroll, useTransform } from "framer-motion"
 import { 
   Search, History, Trash2, Calendar, Users, 
   Globe, Star, Compass, ArrowRight, Sparkles, Navigation, 
-  CloudSun, Landmark, Heart, Smile, Brain, Plane, Hotel, Coins 
+  CloudSun, Landmark, Heart, Smile, Brain, Plane, Hotel, Coins,
+  UserPlus, Check, X
 } from "lucide-react";
 import { 
-  getSavedTrips, createLocalTrip, deleteLocalTrip, 
-  createSupabaseTrip, getSearchHistory, saveSearchQuery, Trip 
+  getMongoTrips, createMongoTrip, deleteMongoTrip,
+  getMongoInvitations, respondToInvitation,
+  getSearchHistory, saveSearchQuery, Trip
 } from "@/lib/store";
-import { supabase, isSupabaseConfigured } from "@/lib/supabaseClient";
 import ImageWithFallback from "@/components/ImageWithFallback";
 import ScrollReveal from "@/components/ScrollReveal";
 
@@ -52,7 +53,6 @@ export default function HomePage() {
 
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [generating, setGenerating] = useState(false);
-  const [user, setUser] = useState<any>(null);
 
   // Load the most recent trip for the preview card
   const latestTrip = savedTrips.length > 0 ? savedTrips[0] : null;
@@ -130,55 +130,40 @@ export default function HomePage() {
     return () => clearInterval(interval);
   }, [placeholderSuggestions.length]);
 
-  // Load Saved data and Auth Session
+  const [invitations, setInvitations] = useState<Trip[]>([]);
+  const [respondingId, setRespondingId] = useState<string | null>(null);
+
+  const loadTripsAndInvitations = async () => {
+    try {
+      const [trips, invites] = await Promise.all([
+        getMongoTrips(),
+        getMongoInvitations(),
+      ]);
+      setSavedTrips(trips);
+      setInvitations(invites);
+    } catch (error) {
+      console.error("Could not load MongoDB trips:", error);
+    }
+  };
+
+  // MongoDB is the source of truth for authenticated users.
   useEffect(() => {
     setHistory(getSearchHistory());
-    setSavedTrips(getSavedTrips());
-
-    if (isSupabaseConfigured) {
-      supabase.auth.getSession().then(({ data: { session } }) => {
-        setUser(session?.user ?? null);
-      });
-
-      const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-        setUser(session?.user ?? null);
-      });
-
-      return () => subscription.unsubscribe();
-    }
+    loadTripsAndInvitations();
   }, []);
 
-  // Update trips list when user logs in or out
-  useEffect(() => {
-    const reloadTrips = async () => {
-      if (isSupabaseConfigured && user) {
-        const { data, error } = await supabase
-          .from("trips")
-          .select("id, destination, origin_city, start_date, days, travelers, budget_limit, created_at")
-          .order("created_at", { ascending: false });
-
-        if (!error && data) {
-          const mappedTrips = data.map((t: any) => ({
-            id: t.id,
-            destination: t.destination,
-            originCity: t.origin_city || "",
-            startDate: t.start_date || "",
-            days: t.days,
-            travelers: t.travelers || 1,
-            budgetLimit: parseFloat(t.budget_limit || 50000),
-            itinerary: [],
-            expenses: [],
-            packingList: [],
-            createdAt: t.created_at
-          }));
-          setSavedTrips(mappedTrips);
-        }
-      } else {
-        setSavedTrips(getSavedTrips());
-      }
-    };
-    reloadTrips();
-  }, [user]);
+  const handleRespondInvitation = async (tripId: string, action: "accept" | "decline", e: React.MouseEvent) => {
+    e.stopPropagation();
+    setRespondingId(tripId);
+    try {
+      await respondToInvitation(tripId, action);
+      await loadTripsAndInvitations();
+    } catch (error: any) {
+      alert(error.message || "Failed to respond to invitation");
+    } finally {
+      setRespondingId(null);
+    }
+  };
 
   // Voice Search Handler
   const handleVoiceSearch = () => {
@@ -214,7 +199,7 @@ export default function HomePage() {
     }
   };
 
-  // Submit Handler (Supports Dual localStorage/Supabase storage)
+  // Submit Handler (Saves trip to MongoDB)
   const handleSearchSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!destination.trim()) return;
@@ -271,18 +256,7 @@ export default function HomePage() {
       const data = await response.json();
       
       let newTrip;
-      if (isSupabaseConfigured && user) {
-        newTrip = await createSupabaseTrip({
-          destination: tripParams.destination,
-          originCity: tripParams.originCity,
-          startDate: tripParams.startDate,
-          days: data.generatedDays || 3,
-          travelers: tripParams.travelers,
-          budgetLimit: tripParams.budgetLimit,
-          itinerary: data.days || [],
-        }, user.id);
-      } else {
-        newTrip = createLocalTrip({
+      newTrip = await createMongoTrip({
           destination: tripParams.destination,
           originCity: tripParams.originCity,
           startDate: tripParams.startDate,
@@ -291,7 +265,6 @@ export default function HomePage() {
           budgetLimit: tripParams.budgetLimit,
           itinerary: data.days || [],
         });
-      }
 
       if (newTrip) router.push(`/planner/${newTrip.id}`);
     } catch (err) {
@@ -308,18 +281,7 @@ export default function HomePage() {
         }
       ];
 
-      if (isSupabaseConfigured && user) {
-        newTrip = await createSupabaseTrip({
-          destination: tripParams.destination,
-          originCity: tripParams.originCity,
-          startDate: tripParams.startDate,
-          days: 3,
-          travelers: tripParams.travelers,
-          budgetLimit: tripParams.budgetLimit,
-          itinerary: fallbackItinerary,
-        }, user.id);
-      } else {
-        newTrip = createLocalTrip({
+      newTrip = await createMongoTrip({
           destination: tripParams.destination,
           originCity: tripParams.originCity,
           startDate: tripParams.startDate,
@@ -328,7 +290,6 @@ export default function HomePage() {
           budgetLimit: tripParams.budgetLimit,
           itinerary: fallbackItinerary,
         });
-      }
       if (newTrip) router.push(`/planner/${newTrip.id}`);
     } finally {
       setGenerating(false);
@@ -337,38 +298,11 @@ export default function HomePage() {
 
   const handleDeleteSaved = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (isSupabaseConfigured && user) {
-      const { error } = await supabase.from("trips").delete().eq("id", id);
-      if (error) {
-        alert("Could not delete cloud trip: " + error.message);
-        return;
-      }
-    } else {
-      deleteLocalTrip(id);
-    }
-    // Refresh lists
-    if (isSupabaseConfigured && user) {
-      const { data } = await supabase
-        .from("trips")
-        .select("id, destination, origin_city, start_date, days, travelers, budget_limit, created_at")
-        .order("created_at", { ascending: false });
-      if (data) {
-        setSavedTrips(data.map((t: any) => ({
-          id: t.id,
-          destination: t.destination,
-          originCity: t.origin_city || "",
-          startDate: t.start_date || "",
-          days: t.days,
-          travelers: t.travelers || 1,
-          budgetLimit: parseFloat(t.budget_limit || 50000),
-          itinerary: [],
-          expenses: [],
-          packingList: [],
-          createdAt: t.created_at
-        })));
-      }
-    } else {
-      setSavedTrips(getSavedTrips());
+    try {
+      await deleteMongoTrip(id);
+      setSavedTrips(await getMongoTrips());
+    } catch (error: any) {
+      alert(error.message || "Could not delete trip from MongoDB");
     }
   };
 
@@ -894,6 +828,73 @@ export default function HomePage() {
         </section>
       </ScrollReveal>
 
+      {/* 2.5 PENDING CO-TRAVELER INVITATIONS BANNER & CARDS */}
+      {invitations.length > 0 && (
+        <ScrollReveal delay={0.05}>
+          <section className="mb-10 p-6 rounded-3xl border border-teal-300/50 bg-gradient-to-br from-teal-500/10 via-emerald-500/5 to-white/70 shadow-lg text-left backdrop-blur-md">
+            <div className="flex items-center gap-2 mb-4">
+              <div className="w-8 h-8 rounded-full bg-teal-600 text-white flex items-center justify-center shadow-md">
+                <UserPlus className="w-4 h-4" />
+              </div>
+              <div>
+                <h2 className="text-lg font-black font-display text-gray-900 leading-tight">
+                  Pending Co-Traveler Invitations ({invitations.length})
+                </h2>
+                <p className="text-[11px] text-gray-500 font-semibold">
+                  Accept an invitation to add the full itinerary and budget planner to your workspace.
+                </p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {invitations.map((invite) => (
+                <div
+                  key={invite.id}
+                  className="p-4 rounded-2xl bg-white/90 border border-teal-200/60 shadow-sm flex flex-col justify-between gap-3 hover:border-teal-500/40 transition-all"
+                >
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <span className="text-[9px] font-extrabold uppercase tracking-wider text-teal-700 bg-teal-500/10 px-2 py-0.5 rounded-full">
+                        {invite.days} Days • {invite.originCity || "Origin"} ➔ {invite.destination}
+                      </span>
+                      <h3 className="text-base font-extrabold text-gray-900 mt-1 font-display flex items-center gap-1.5">
+                        <span>{invite.destination}</span>
+                        <span>{getFlagEmoji(invite.destination)}</span>
+                      </h3>
+                      <p className="text-[10px] text-gray-500 mt-0.5">
+                        Start: {invite.startDate || "TBD"} • {invite.travelers} Traveler(s)
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 pt-2 border-t border-gray-100">
+                    <button
+                      type="button"
+                      disabled={respondingId === invite.id}
+                      onClick={(e) => handleRespondInvitation(invite.id, "accept", e)}
+                      className="flex-1 py-2 px-3 rounded-xl bg-teal-600 hover:bg-teal-700 disabled:opacity-50 text-white font-extrabold text-xs shadow-md transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                    >
+                      <Check className="w-3.5 h-3.5" />
+                      <span>{respondingId === invite.id ? "Accepting..." : "Accept & Join"}</span>
+                    </button>
+                    <button
+                      type="button"
+                      disabled={respondingId === invite.id}
+                      onClick={(e) => handleRespondInvitation(invite.id, "decline", e)}
+                      className="py-2 px-3 rounded-xl bg-gray-100 hover:bg-gray-200 disabled:opacity-50 text-gray-600 font-bold text-xs transition-colors flex items-center justify-center gap-1 cursor-pointer"
+                      title="Decline invitation"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                      <span>Decline</span>
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+        </ScrollReveal>
+      )}
+
       {/* 3. SAVED / SYNCED CLOUD ITINERARIES LIST */}
       {savedTrips.length > 0 && (
         <ScrollReveal delay={0.1}>
@@ -901,7 +902,7 @@ export default function HomePage() {
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-xl md:text-2xl font-extrabold font-display text-[#221F1C] flex items-center gap-2">
                 <Globe className="w-5 h-5 text-[#4C7ABF]" />
-                {user ? "Cloud Workspace Trips" : "Local Saved Itineraries"}
+                Your MongoDB Trips
               </h2>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-5">
