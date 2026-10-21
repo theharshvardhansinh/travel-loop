@@ -54,6 +54,7 @@ export const CITY_AIRPORT_MAP: Record<string, string> = {
   'coorg': 'MYQ',
   'hampi': 'VDY',
   'gokarna': 'GOI',
+  'anand': 'BDQ',
 
   // International Destinations
   'sharjah': 'SHJ',
@@ -257,6 +258,7 @@ export const CITY_COORDS: Record<string, { lat: number; lng: number }> = {
   'bandhavgarh': { lat: 23.7000, lng: 81.0333 },
   'kaziranga': { lat: 26.6775, lng: 93.3464 },
   'hennur': { lat: 12.9873, lng: 77.6358 },
+  'anand': { lat: 22.5645, lng: 72.9289 },
 };
 
 import { getCached, setCached } from "./redis";

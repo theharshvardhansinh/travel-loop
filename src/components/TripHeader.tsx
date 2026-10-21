@@ -181,6 +181,57 @@ export default function TripHeader({ trip, isInternational }: TripHeaderProps) {
               <span className="inline-flex items-center gap-1 text-[10px] uppercase tracking-wider text-indigo-700 font-extrabold bg-indigo-500/10 px-2.5 py-0.75 rounded-full whitespace-nowrap">
                 Trip Active • {trip.days} Days
               </span>
+              
+              {/* Transport Mode Badge */}
+              <span className={`inline-flex items-center gap-1 text-[10px] uppercase tracking-wider font-extrabold px-2.5 py-0.75 rounded-full border whitespace-nowrap ${
+                trip.transportMode === "bike"
+                  ? "bg-teal-500/10 text-teal-800 border-teal-500/30"
+                  : trip.transportMode === "car"
+                  ? "bg-indigo-500/10 text-indigo-800 border-indigo-500/30"
+                  : trip.transportMode === "train"
+                  ? "bg-emerald-500/10 text-emerald-800 border-emerald-500/30"
+                  : "bg-blue-500/10 text-blue-800 border-blue-500/30"
+              }`}>
+                {trip.transportMode === "bike"
+                  ? "🏍️ Bike Road Trip"
+                  : trip.transportMode === "car"
+                  ? "🚗 Car Road Trip"
+                  : trip.transportMode === "train"
+                  ? "🚆 Train Journey"
+                  : "✈️ Flight Trip"}
+              </span>
+
+              {/* Group Type Badge */}
+              {trip.groupType && (
+                <span className="inline-flex items-center gap-1 text-[10px] uppercase tracking-wider text-purple-700 font-extrabold bg-purple-500/10 px-2.5 py-0.75 rounded-full border border-purple-500/20 whitespace-nowrap">
+                  {trip.groupType === "solo"
+                    ? "👤 Solo"
+                    : trip.groupType === "couple"
+                    ? "💑 Couple"
+                    : trip.groupType === "friends"
+                    ? "👥 Friends Squad"
+                    : "👨‍👩‍👦 Family"}
+                </span>
+              )}
+
+              {/* Trip Vibe Badge */}
+              {trip.tripVibe && (
+                <span className="inline-flex items-center gap-1 text-[10px] uppercase tracking-wider text-amber-800 font-extrabold bg-amber-500/10 px-2.5 py-0.75 rounded-full border border-amber-500/20 whitespace-nowrap">
+                  {trip.tripVibe === "spiritual"
+                    ? "🪔 Spiritual"
+                    : trip.tripVibe === "adventures"
+                    ? "🧗 Adventures"
+                    : "🌲 Nature & Scenic"}
+                </span>
+              )}
+
+              {/* Road Distance Badge */}
+              {trip.routeDistanceKm && (
+                <span className="inline-flex items-center gap-1 text-[10px] uppercase tracking-wider text-emerald-800 font-extrabold bg-emerald-500/15 px-2.5 py-0.75 rounded-full border border-emerald-500/30 whitespace-nowrap">
+                  🛣️ {trip.routeDistanceKm} km {trip.routeDurationHours ? `(~${trip.routeDurationHours}h)` : ""}
+                </span>
+              )}
+
               {isInternational !== null && (
                 isInternational ? (
                   <span className="inline-flex items-center gap-1 text-[10px] uppercase tracking-wider text-rose-700 font-extrabold bg-rose-500/10 px-2.5 py-0.75 rounded-full border border-rose-500/20 animate-pulse shadow-[0_0_8px_rgba(244,63,94,0.3)] whitespace-nowrap">
@@ -188,7 +239,7 @@ export default function TripHeader({ trip, isInternational }: TripHeaderProps) {
                   </span>
                 ) : (
                   <span className="inline-flex items-center gap-1 text-[10px] uppercase tracking-wider text-emerald-700 font-extrabold bg-emerald-500/10 px-2.5 py-0.75 rounded-full border border-emerald-500/20 whitespace-nowrap">
-                    🚗 Domestic Trip
+                    Domestic Trip
                   </span>
                 )
               )}

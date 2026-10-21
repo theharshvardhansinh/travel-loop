@@ -7,9 +7,12 @@ import { motion, AnimatePresence } from "framer-motion";
 import { 
   Calendar, Users, MapPin, Plus, Trash2, Edit3, ChevronDown, ChevronUp,
   CloudSun, Briefcase, DollarSign, Navigation, Hotel, PlusCircle, ArrowUpDown,
-  Sparkles, MessageSquare, Send, Globe, UserPlus, Mail, X, Check, UserCheck
+  Sparkles, MessageSquare, Send, Globe, UserPlus, Mail, X, Check, UserCheck,
+  Bike, Car, Train, Plane, Utensils, Fuel, Radar, ShieldCheck,
+  ExternalLink, Clock, Ticket
 } from "lucide-react";
 import { useActiveTrip, TripActivity, updateTripRecord } from "@/lib/store";
+import { RoadRouteResult, PitstopPlace } from "@/lib/roadRouteEngine";
 import ExportButtons from "@/components/ExportButtons";
 import AIChatAssistant from "@/components/AIChatAssistant";
 import ImageWithFallback from "@/components/ImageWithFallback";
@@ -142,11 +145,14 @@ export default function PlannerPage() {
   const [weatherAdvice, setWeatherAdvice] = useState<any>(null);
   const [loadingWeather, setLoadingWeather] = useState(false);
 
-  // Booking Deals States
+  // Booking & Pitstop Deals States
   const [flightDeals, setFlightDeals] = useState<any[]>([]);
+  const [trainDeals, setTrainDeals] = useState<any[]>([]);
+  const [roadRoute, setRoadRoute] = useState<RoadRouteResult | null>(null);
   const [hotelDeals, setHotelDeals] = useState<any[]>([]);
   const [loadingDeals, setLoadingDeals] = useState(false);
   const [dealSorting, setDealSorting] = useState<"price" | "rating">("price");
+  const [pitstopFilter, setPitstopFilter] = useState<"all" | "lunch" | "dinner" | "hotel">("all");
 
   // Packing List input
   const [newPackingText, setNewPackingText] = useState("");
@@ -239,21 +245,51 @@ export default function PlannerPage() {
     const fetchDealsData = async () => {
       setLoadingDeals(true);
       setFlightDeals([]);
+      setTrainDeals([]);
       setHotelDeals([]);
       try {
-        // Fetch flights deals
-        const flightRes = await fetch(
-          `/api/travel/flights?departure_id=${encodeURIComponent(trip.originCity || "Mumbai")}&arrival_id=${encodeURIComponent(
-            trip.destination
-          )}&outbound_date=${trip.startDate}`,
-          { signal }
-        );
-        if (flightRes.ok) {
-          const flightData = await flightRes.json();
-          setFlightDeals(flightData.best_flights || []);
+        // 1. Fetch Transit / Road Pitstops depending on transportMode
+        if (trip.transportMode === "bike" || trip.transportMode === "car") {
+          const roadRes = await fetch(
+            `/api/travel/road-route?origin=${encodeURIComponent(trip.originCity || "Mumbai")}&destination=${encodeURIComponent(
+              trip.destination
+            )}&mode=${trip.transportMode}&tripVibe=${trip.tripVibe || ""}`,
+            { signal }
+          );
+          if (roadRes.ok) {
+            const roadData = await roadRes.json();
+            setRoadRoute(roadData);
+          }
+        } else if (trip.transportMode === "train") {
+          const trainRes = await fetch("/api/travel/transit-options", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              origin: trip.originCity || "Mumbai",
+              destination: trip.destination,
+              mode: "train"
+            }),
+            signal
+          });
+          if (trainRes.ok) {
+            const trainData = await trainRes.json();
+            setTrainDeals(trainData.options || []);
+          }
+        } else {
+          // Fetch flights deals
+          const flightRes = await fetch(
+            `/api/travel/flights?departure_id=${encodeURIComponent(trip.originCity || "Mumbai")}&arrival_id=${encodeURIComponent(
+              trip.destination
+            )}&outbound_date=${trip.startDate}`,
+            { signal }
+          );
+          if (flightRes.ok) {
+            const flightData = await flightRes.json();
+            setFlightDeals(flightData.best_flights || []);
+          }
         }
 
-        // Fetch hotels deals
+        // 2. Fetch hotels deals
         const checkOut = new Date(trip.startDate);
         checkOut.setDate(checkOut.getDate() + trip.days);
         const hotelRes = await fetch(
@@ -620,7 +656,111 @@ export default function PlannerPage() {
 
                   {/* Day Activities Collapsible content */}
                   {isExpanded && (
-                    <div className="px-4 pb-4 pt-1 border-t border-gray-100 space-y-2">
+                    <div className="px-4 pb-4 pt-1 border-t border-gray-100 space-y-3">
+                      {/* Day Dedicated Hotel Stay & Meals Deck (8 km Radius Corridor) */}
+                      {(day.stay || day.lunch || day.dinner || trip.transportMode === "bike" || trip.transportMode === "car") && (
+                        <div className="p-3 rounded-xl bg-gradient-to-r from-amber-50/70 via-teal-50/40 to-indigo-50/60 border border-amber-200/70 text-left mt-2 shadow-2xs">
+                          <div className="flex flex-wrap items-center justify-between gap-1.5 mb-2.5 pb-1.5 border-b border-amber-200/60">
+                            <div className="flex items-center gap-1.5 text-[11px] font-black text-slate-800">
+                              <span className="p-1 rounded-md bg-amber-500/10 text-amber-700">
+                                {trip.transportMode === "bike" ? <Bike className="w-3.5 h-3.5" /> : <Car className="w-3.5 h-3.5" />}
+                              </span>
+                              <span>Day {day.dayNumber} Stay & Highway Pitstops (Within 8 km Corridor)</span>
+                            </div>
+                            <span className="text-[10px] font-bold text-amber-900 bg-amber-100 px-2 py-0.5 rounded-full">
+                              {day.sectorInfo || `Sector Reach: ~${day.dayDistanceKm || (trip.routeDistanceKm || 300)} km`}
+                            </span>
+                          </div>
+
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                            {/* Night Stay Hotel - Different for each day */}
+                            <div className="p-2.5 rounded-lg bg-white/95 border border-teal-200 shadow-xs flex flex-col justify-between">
+                              <div>
+                                <div className="flex items-center justify-between text-[9px] font-black text-teal-700 uppercase tracking-wider mb-1">
+                                  <span className="flex items-center gap-1">🏨 Night Stay</span>
+                                  <span className="text-amber-600 font-bold">★ {day.stay?.rating || 4.6}</span>
+                                </div>
+                                <h5 className="text-xs font-black text-slate-900 line-clamp-1">{day.stay?.name || `${trip.destination} Traveler's Haven`}</h5>
+                                <p className="text-[9.5px] text-slate-500 line-clamp-1 mt-0.5">{day.stay?.description || 'Comfortable stay with secure vehicle parking and hot showers.'}</p>
+                                <div className="flex items-center justify-between text-[9.5px] font-bold mt-1.5 pt-1 border-t border-slate-100">
+                                  <span className="text-emerald-700">📍 {day.stay?.distanceFromRouteKm || 2.1} km from route (≤ 8 km)</span>
+                                  <span className="text-slate-800 font-extrabold">₹{(day.stay?.pricePerNight || 2800).toLocaleString('en-IN')}/nt</span>
+                                </div>
+                              </div>
+                              <a
+                                href={day.stay?.directLink || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent((day.stay?.name || trip.destination) + ' hotel ' + trip.destination)}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="mt-2 inline-flex items-center justify-center gap-1.5 w-full py-1.5 px-2.5 rounded-md bg-teal-600 hover:bg-teal-700 active:scale-[0.99] text-white text-[10px] font-bold transition-all shadow-xs"
+                              >
+                                <span>Direct Hotel Link</span>
+                                <ExternalLink className="w-3 h-3" />
+                              </a>
+                            </div>
+
+                            {/* Lunch Stop */}
+                            <div className="p-2.5 rounded-lg bg-white/95 border border-amber-200 shadow-xs flex flex-col justify-between">
+                              <div>
+                                <div className="flex items-center justify-between text-[9px] font-black text-amber-800 uppercase tracking-wider mb-1">
+                                  <span className="flex items-center gap-1">🍽️ Lunch Pitstop</span>
+                                  <span className="text-slate-500 font-medium">{day.lunch?.cuisine || 'Regional'}</span>
+                                </div>
+                                <h5 className="text-xs font-black text-slate-900 line-clamp-1">{day.lunch?.name || `${trip.destination} Midway Dhaba`}</h5>
+                                <p className="text-[9.5px] text-slate-500 line-clamp-1 mt-0.5">{day.lunch?.description || 'Authentic highway lunch feasts, fresh rotis and hot beverages.'}</p>
+                                <div className="flex items-center justify-between text-[9.5px] font-bold mt-1.5 pt-1 border-t border-slate-100">
+                                  <span className="text-emerald-700">📍 {day.lunch?.distanceFromRouteKm || 0.8} km off route (≤ 8 km)</span>
+                                  <span className="text-slate-800 font-extrabold">~₹{day.lunch?.pricePerPerson || 350}/person</span>
+                                </div>
+                              </div>
+                              <a
+                                href={day.lunch?.directLink || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent((day.lunch?.name || trip.destination) + ' ' + trip.destination)}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="mt-2 inline-flex items-center justify-center gap-1.5 w-full py-1.5 px-2.5 rounded-md bg-amber-600 hover:bg-amber-700 active:scale-[0.99] text-white text-[10px] font-bold transition-all shadow-xs"
+                              >
+                                <span>Direct Lunch Link</span>
+                                <ExternalLink className="w-3 h-3" />
+                              </a>
+                            </div>
+
+                            {/* Dinner Stop */}
+                            <div className="p-2.5 rounded-lg bg-white/95 border border-purple-200 shadow-xs flex flex-col justify-between">
+                              <div>
+                                <div className="flex items-center justify-between text-[9px] font-black text-purple-800 uppercase tracking-wider mb-1">
+                                  <span className="flex items-center gap-1">🍷 Dinner Spot</span>
+                                  <span className="text-slate-500 font-medium">{day.dinner?.cuisine || 'Tandoor & Local'}</span>
+                                </div>
+                                <h5 className="text-xs font-black text-slate-900 line-clamp-1">{day.dinner?.name || `${trip.destination} Royal Diner`}</h5>
+                                <p className="text-[9.5px] text-slate-500 line-clamp-1 mt-0.5">{day.dinner?.description || 'Evening restaurant with sizzling grills, curries and relaxing atmosphere.'}</p>
+                                <div className="flex items-center justify-between text-[9.5px] font-bold mt-1.5 pt-1 border-t border-slate-100">
+                                  <span className="text-emerald-700">📍 {day.dinner?.distanceFromRouteKm || 1.5} km off route (≤ 8 km)</span>
+                                  <span className="text-slate-800 font-extrabold">~₹{day.dinner?.pricePerPerson || 500}/person</span>
+                                </div>
+                              </div>
+                              <a
+                                href={day.dinner?.directLink || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent((day.dinner?.name || trip.destination) + ' ' + trip.destination)}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="mt-2 inline-flex items-center justify-center gap-1.5 w-full py-1.5 px-2.5 rounded-md bg-purple-600 hover:bg-purple-700 active:scale-[0.99] text-white text-[10px] font-bold transition-all shadow-xs"
+                              >
+                                <span>Direct Dinner Link</span>
+                                <ExternalLink className="w-3 h-3" />
+                              </a>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Day Activities Count Header */}
+                      <div className="flex items-center justify-between pt-1 pb-0.5 text-left">
+                        <span className="text-[10px] font-black text-slate-500 uppercase tracking-wider flex items-center gap-1">
+                          <span>📍 Planned Stops ({day.activities.length} {day.activities.length === 2 ? 'In-Depth Stops ~4h' : day.activities.length >= 4 ? 'Quick Stops 1h-1.5h' : 'Stops ~2h'})</span>
+                        </span>
+                        <span className="text-[9.5px] font-bold text-teal-600">
+                          {day.activities.filter(a => a.hasTicket).length > 0 ? `${day.activities.filter(a => a.hasTicket).length} Ticketed` : 'All Free Entry'}
+                        </span>
+                      </div>
+
                       {day.activities.length === 0 ? (
                         <div className="text-center py-4 text-[11px] text-gray-400 italic">
                           No activities planned. Click + to add stops.
@@ -641,10 +781,33 @@ export default function PlannerPage() {
                                     <span>📍</span> {act.name}
                                   </h4>
                                   {act.time && (
-                                    <span className="inline-block px-1.5 py-0.5 text-[8.5px] font-bold bg-amber-100/50 text-amber-800 rounded mt-0.5 uppercase tracking-wide">
+                                    <span className="inline-block px-1.5 py-0.5 text-[8.5px] font-bold bg-amber-100/50 text-amber-800 rounded mt-0.5 uppercase tracking-wide mr-1">
                                       {act.time}
                                     </span>
                                   )}
+                                  {act.duration && (
+                                    <span className="inline-block px-1.5 py-0.5 text-[8.5px] font-bold bg-blue-100/60 text-blue-900 rounded mt-0.5 mr-1">
+                                      ⏱️ {act.duration}
+                                    </span>
+                                  )}
+                                  {act.hasTicket === false || act.ticketCost === 0 ? (
+                                    <span className="inline-block px-1.5 py-0.5 text-[8.5px] font-bold bg-emerald-100/60 text-emerald-900 rounded mt-0.5 mr-1">
+                                      🎟️ Free
+                                    </span>
+                                  ) : (
+                                    <span className="inline-block px-1.5 py-0.5 text-[8.5px] font-bold bg-amber-100/70 text-amber-900 rounded mt-0.5 mr-1">
+                                      🎟️ ₹{act.ticketCost || 150}
+                                    </span>
+                                  )}
+                                  <a
+                                    href={act.directLink || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(act.name + ' ' + trip.destination)}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-flex items-center gap-0.5 text-[8.5px] font-bold text-teal-700 hover:underline mt-0.5"
+                                  >
+                                    <span>Maps</span>
+                                    <ExternalLink className="w-2.5 h-2.5" />
+                                  </a>
                                 </div>
                                 <div className="flex items-center gap-1">
                                   <button
@@ -776,11 +939,45 @@ export default function PlannerPage() {
                                 )}
 
                                 <p className="text-[10px] text-gray-500 mt-1 leading-normal">{act.description}</p>
-                                {act.time && (
-                                  <span className="inline-block px-1.5 py-0.5 mt-2 text-[9px] font-bold bg-coral-500/5 text-coral-600 rounded">
-                                    {act.time}
-                                  </span>
-                                )}
+                                
+                                <div className="flex flex-wrap items-center gap-1.5 mt-2.5">
+                                  {act.time && (
+                                    <span className="inline-block px-1.5 py-0.5 text-[8.5px] font-bold bg-slate-100 text-slate-700 rounded">
+                                      {act.time}
+                                    </span>
+                                  )}
+                                  {(act.duration || day.activities.length) && (
+                                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[8.5px] font-bold bg-blue-50 text-blue-700 border border-blue-200/60 rounded">
+                                      <Clock className="w-2.5 h-2.5" />
+                                      <span>{act.duration || (day.activities.length <= 2 ? "4 hours" : day.activities.length >= 4 ? "1.5 hours" : "2 hours")}</span>
+                                    </span>
+                                  )}
+                                  {act.timeSlot && (
+                                    <span className="inline-block px-1.5 py-0.5 text-[8.5px] font-medium bg-slate-50 text-slate-600 border border-slate-200/60 rounded">
+                                      🕒 {act.timeSlot}
+                                    </span>
+                                  )}
+                                  {act.hasTicket === false || act.ticketCost === 0 ? (
+                                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[8.5px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200/60 rounded">
+                                      <Ticket className="w-2.5 h-2.5" />
+                                      <span>Free Entry</span>
+                                    </span>
+                                  ) : (
+                                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[8.5px] font-bold bg-amber-50 text-amber-800 border border-amber-200/60 rounded">
+                                      <Ticket className="w-2.5 h-2.5" />
+                                      <span>{act.ticketInfo || `Ticket: ₹${act.ticketCost || 150}/person`}</span>
+                                    </span>
+                                  )}
+                                  <a
+                                    href={act.directLink || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(act.name + ' ' + trip.destination)}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-flex items-center gap-1 px-2 py-0.5 text-[9px] font-bold text-teal-700 hover:text-teal-900 bg-teal-50 hover:bg-teal-100 border border-teal-200/60 rounded transition-colors ml-auto shadow-2xs"
+                                  >
+                                    <span>Direct Location</span>
+                                    <ExternalLink className="w-2.5 h-2.5" />
+                                  </a>
+                                </div>
                               </div>
                             </div>
                           )
@@ -1194,73 +1391,228 @@ export default function PlannerPage() {
           {/* TAB 3: DEALS */}
           {activeSidebarTab === "deals" && (
             <div className="flex-1 overflow-y-auto space-y-4 pr-1 text-left">
-              {/* Flight Carrier Comparison Decks */}
-              <div className="p-4 rounded-xl border border-gray-200 bg-white shadow-sm">
-                <h3 className="text-xs font-bold text-gray-700 uppercase tracking-wide mb-3 flex items-center gap-1.5">
-                  <Navigation className="w-4 h-4 text-teal-600" />
-                  Flight Carrier Comparison
-                </h3>
-                {loadingDeals ? (
-                  <div className="grid grid-cols-2 gap-2.5">
-                    <div className="p-3 rounded-xl border border-gray-100 bg-gray-50/50 animate-pulse h-28 flex flex-col justify-between">
-                      <div className="space-y-1.5">
-                        <div className="h-3 bg-gray-200 rounded w-2/3" />
-                        <div className="h-2 bg-gray-200 rounded w-1/2" />
-                      </div>
-                      <div className="h-3 bg-gray-200 rounded w-1/3" />
+              {/* 1. Road Trip & 8 KM Highway Radar (when mode is bike or car) */}
+              {(trip.transportMode === "bike" || trip.transportMode === "car") && (
+                <div className="p-4 rounded-xl border border-teal-500/20 bg-teal-500/5 shadow-sm text-left">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 pb-2 mb-2 border-b border-teal-500/15">
+                    <div>
+                      <h3 className="text-xs font-black text-teal-800 uppercase tracking-wide flex items-center gap-1.5">
+                        {trip.transportMode === "bike" ? <Bike className="w-4 h-4 text-teal-600" /> : <Car className="w-4 h-4 text-indigo-600" />}
+                        {trip.transportMode === "bike" ? "🏍️ Bike Road Route & Pitstops" : "🚗 Road Trip Pitstop Radar"}
+                      </h3>
+                      <p className="text-[10px] text-slate-600 font-bold mt-0.5">
+                        {roadRoute?.distanceKm || trip.routeDistanceKm || 585} KM • {roadRoute?.durationText || (trip.transportMode === "bike" ? "~11h ride" : "~9h drive")} • Est. Fuel: ~₹{roadRoute?.fuelEstimatedCost?.toLocaleString() || "1,920"}
+                      </p>
                     </div>
-                    <div className="p-3 rounded-xl border border-gray-100 bg-gray-50/50 animate-pulse h-28 flex flex-col justify-between">
-                      <div className="space-y-1.5">
-                        <div className="h-3 bg-gray-200 rounded w-2/3" />
-                        <div className="h-2 bg-gray-200 rounded w-1/2" />
-                      </div>
-                      <div className="h-3 bg-gray-200 rounded w-1/3" />
+                    <div className="flex items-center gap-1 bg-white px-2 py-1 rounded-lg border border-teal-500/20 shadow-xs self-start sm:self-auto">
+                      <Radar className="w-3.5 h-3.5 text-teal-600 animate-spin" style={{ animationDuration: "6s" }} />
+                      <span className="text-[8.5px] font-black text-teal-800 uppercase">8 km Corridor Radar</span>
                     </div>
                   </div>
-                ) : (
-                  <div className="grid grid-cols-2 gap-2.5">
-                    {flightDeals.length > 0 ? (
-                      flightDeals.slice(0, 2).map((f: any, idx: number) => {
-                        const carrierName = f.flights?.[0]?.airline || "Air Carrier";
-                        const hrs = Math.floor(f.total_duration / 60);
-                        const mins = f.total_duration % 60;
-                        const timeStr = hrs > 0 ? `${hrs}h ${mins}m` : `${mins}m`;
-                        const stopsStr = f.flights?.length > 1 ? `${f.flights.length - 1} Stop` : "Direct";
-                        const colors = [
-                          "border-red-200 bg-red-500/5 text-red-700",
-                          "border-blue-200 bg-blue-500/5 text-blue-700"
-                        ][idx % 2];
-                        
+
+                  <p className="text-[9.5px] text-slate-600 font-medium mb-2.5">
+                    Curated <strong>Hotels, Lunch & Dinner dhabas strictly within 8 km</strong> of your highway route:
+                  </p>
+
+                  {/* Filter Pills */}
+                  <div className="flex flex-wrap gap-1 mb-3">
+                    {[
+                      { id: "all", label: `All Pitstops (${roadRoute?.allPitstops?.length || trip.pitstops?.length || 6})` },
+                      { id: "lunch", label: `🍲 Lunch (${roadRoute?.lunchStops?.length || 2})` },
+                      { id: "dinner", label: `🍽️ Dinner (${roadRoute?.dinnerStops?.length || 2})` },
+                      { id: "hotel", label: `🏨 Hotels (${roadRoute?.hotelsAlongRoute?.length || 2})` },
+                    ].map((tab) => (
+                      <button
+                        key={tab.id}
+                        type="button"
+                        onClick={() => setPitstopFilter(tab.id as any)}
+                        className={`px-2 py-0.5 rounded-full text-[9px] font-extrabold transition-all cursor-pointer ${
+                          pitstopFilter === tab.id
+                            ? "bg-teal-600 text-white shadow-xs"
+                            : "bg-white text-slate-600 hover:bg-slate-100 border border-gray-200"
+                        }`}
+                      >
+                        {tab.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Pitstop Cards */}
+                  <div className="space-y-2.5">
+                    {(() => {
+                      const list = pitstopFilter === "lunch"
+                        ? roadRoute?.lunchStops || []
+                        : pitstopFilter === "dinner"
+                        ? roadRoute?.dinnerStops || []
+                        : pitstopFilter === "hotel"
+                        ? roadRoute?.hotelsAlongRoute || []
+                        : roadRoute?.allPitstops || (trip.pitstops as any[]) || [];
+
+                      if (list.length === 0) {
                         return (
-                          <div key={idx} className={`p-3 rounded-xl border ${colors} flex flex-col justify-between h-28 text-left`}>
-                            <div>
-                              <span className="text-[10px] font-black uppercase tracking-wider block truncate">{carrierName}</span>
-                              <span className="text-[9px] opacity-75 mt-0.5 block">{timeStr} • {stopsStr}</span>
-                            </div>
-                            <div className="mt-auto">
-                              <span className="text-xs font-black block">₹{f.price.toLocaleString("en-IN")}</span>
+                          <div className="text-center py-4 text-[10px] text-gray-400 italic">
+                            Scanning 8 km highway radar along the route...
+                          </div>
+                        );
+                      }
+
+                      return list.map((stop: any, idx: number) => (
+                        <div key={stop.id || idx} className="p-3 rounded-xl bg-white border border-gray-200 shadow-xs flex flex-col justify-between text-left hover:border-teal-500/40 transition-colors">
+                          <div className="flex items-center justify-between gap-1 mb-1">
+                            <span className={`text-[8.5px] font-black uppercase px-2 py-0.5 rounded-full ${
+                              stop.type === "lunch" ? "bg-amber-100 text-amber-800" : stop.type === "dinner" ? "bg-indigo-100 text-indigo-800" : "bg-emerald-100 text-emerald-800"
+                            }`}>
+                              {stop.type === "lunch" ? "🍲 LUNCH STOP" : stop.type === "dinner" ? "🍽️ DINNER STOP" : "🏨 NIGHT HOTEL"} • Km {stop.atKm}
+                            </span>
+                            <span className="text-[8px] font-extrabold text-teal-700 bg-teal-50 px-1.5 py-0.5 rounded border border-teal-200">
+                              📍 {stop.distanceFromRouteKm} km off NH (≤ 8 km)
+                            </span>
+                          </div>
+
+                          <h5 className="text-xs font-black text-slate-800 truncate">{stop.name}</h5>
+                          <p className="text-[10px] text-slate-600 line-clamp-2 mt-0.5">{stop.description}</p>
+
+                          <div className="mt-2 pt-2 border-t border-gray-100 flex items-center justify-between">
+                            <span className="text-[10px] font-black text-slate-900">
+                              {stop.pricePerPerson ? `₹${stop.pricePerPerson}/person` : stop.pricePerNight ? `₹${stop.pricePerNight}/night` : "Budget friendly"} • ⭐ {stop.rating || 4.5}
+                            </span>
+
+                            <div className="flex items-center gap-1.5">
                               <button
                                 type="button"
                                 onClick={() => {
-                                  addExpense(`Flight: ${carrierName}`, "Flights", f.price * trip.travelers);
-                                  alert(`Added ${carrierName} flight expense allocation of Rs ${(f.price * trip.travelers).toLocaleString()} to Budget Ledger.`);
+                                  addActivity(1, stop.name, stop.description, stop.type === "lunch" ? "Afternoon" : stop.type === "dinner" ? "Evening" : "Morning", stop.lat, stop.lng);
+                                  alert(`Added ${stop.name} to Day 1 Itinerary!`);
                                 }}
-                                className="mt-1 text-[8px] font-extrabold underline cursor-pointer hover:opacity-85"
+                                className="text-[8px] font-extrabold bg-teal-50 text-teal-700 border border-teal-200 px-2 py-1 rounded hover:bg-teal-100 transition-colors cursor-pointer"
                               >
-                                Select Carrier
+                                + Itinerary
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const cost = (stop.pricePerPerson || stop.pricePerNight || 350) * trip.travelers;
+                                  addExpense(`${stop.type === 'lunch' ? 'Lunch' : stop.type === 'dinner' ? 'Dinner' : 'Hotel'}: ${stop.name}`, stop.type === 'hotel' ? 'Hotels' : 'Food', cost);
+                                  alert(`Allocated ₹${cost.toLocaleString()} for ${stop.name} to Budget Ledger.`);
+                                }}
+                                className="text-[8px] font-extrabold bg-indigo-50 text-indigo-700 border border-indigo-200 px-2 py-1 rounded hover:bg-indigo-100 transition-colors cursor-pointer"
+                              >
+                                + Budget
                               </button>
                             </div>
                           </div>
-                        );
-                      })
-                    ) : (
-                      <div className="col-span-2 py-6 text-center text-[10px] text-gray-400 italic border border-dashed border-gray-150 rounded-xl w-full">
-                        No flight deals found for this route.
-                      </div>
-                    )}
+                        </div>
+                      ));
+                    })()}
                   </div>
-                )}
-              </div>
+                </div>
+              )}
+
+              {/* 2. Train Transit Options (when mode is train) */}
+              {trip.transportMode === "train" && (
+                <div className="p-4 rounded-xl border border-gray-200 bg-white shadow-sm">
+                  <h3 className="text-xs font-bold text-gray-700 uppercase tracking-wide mb-3 flex items-center gap-1.5">
+                    <Train className="w-4 h-4 text-emerald-600" />
+                    Train & Rail Transit Options
+                  </h3>
+                  <div className="space-y-2.5">
+                    {(trainDeals.length > 0 ? trainDeals : [
+                      { departure: "06:00 AM", arrival: "02:30 PM", duration: "8h 30m", price: 1250, label: "Sleeper Express", train: "Vande Bharat Express" },
+                      { departure: "02:15 PM", arrival: "11:00 PM", duration: "8h 45m", price: 2400, label: "3rd A/C Superfast", train: "Tejas Rajdhani Express" },
+                    ]).map((t: any, idx: number) => (
+                      <div key={idx} className="p-3 rounded-xl border border-emerald-100 bg-emerald-50/20 flex items-center justify-between">
+                        <div>
+                          <span className="text-[10px] font-black uppercase text-emerald-800">{t.train || t.label || "Superfast Express"}</span>
+                          <span className="text-[9px] text-slate-500 block">{t.departure} ➔ {t.arrival} • {t.duration}</span>
+                        </div>
+                        <div className="text-right">
+                          <span className="text-xs font-black text-slate-900 block">₹{t.price}</span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              addExpense(`Train: ${t.train || t.label}`, "Flights", t.price * trip.travelers);
+                              alert(`Added Train ticket expense ₹${(t.price * trip.travelers).toLocaleString()} to budget.`);
+                            }}
+                            className="text-[8px] font-extrabold text-teal-700 underline cursor-pointer"
+                          >
+                            Select Train
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* 3. Flight Carrier Comparison Decks (when mode is flight or default) */}
+              {(trip.transportMode === "flight" || (!trip.transportMode && flightDeals.length > 0)) && (
+                <div className="p-4 rounded-xl border border-gray-200 bg-white shadow-sm">
+                  <h3 className="text-xs font-bold text-gray-700 uppercase tracking-wide mb-3 flex items-center gap-1.5">
+                    <Navigation className="w-4 h-4 text-teal-600" />
+                    Flight Carrier Comparison
+                  </h3>
+                  {loadingDeals ? (
+                    <div className="grid grid-cols-2 gap-2.5">
+                      <div className="p-3 rounded-xl border border-gray-100 bg-gray-50/50 animate-pulse h-28 flex flex-col justify-between">
+                        <div className="space-y-1.5">
+                          <div className="h-3 bg-gray-200 rounded w-2/3" />
+                          <div className="h-2 bg-gray-200 rounded w-1/2" />
+                        </div>
+                        <div className="h-3 bg-gray-200 rounded w-1/3" />
+                      </div>
+                      <div className="p-3 rounded-xl border border-gray-100 bg-gray-50/50 animate-pulse h-28 flex flex-col justify-between">
+                        <div className="space-y-1.5">
+                          <div className="h-3 bg-gray-200 rounded w-2/3" />
+                          <div className="h-2 bg-gray-200 rounded w-1/2" />
+                        </div>
+                        <div className="h-3 bg-gray-200 rounded w-1/3" />
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-2 gap-2.5">
+                      {flightDeals.length > 0 ? (
+                        flightDeals.slice(0, 2).map((f: any, idx: number) => {
+                          const carrierName = f.flights?.[0]?.airline || "Air Carrier";
+                          const hrs = Math.floor(f.total_duration / 60);
+                          const mins = f.total_duration % 60;
+                          const timeStr = hrs > 0 ? `${hrs}h ${mins}m` : `${mins}m`;
+                          const stopsStr = f.flights?.length > 1 ? `${f.flights.length - 1} Stop` : "Direct";
+                          const colors = [
+                            "border-red-200 bg-red-500/5 text-red-700",
+                            "border-blue-200 bg-blue-500/5 text-blue-700"
+                          ][idx % 2];
+                          
+                          return (
+                            <div key={idx} className={`p-3 rounded-xl border ${colors} flex flex-col justify-between h-28 text-left`}>
+                              <div>
+                                <span className="text-[10px] font-black uppercase tracking-wider block truncate">{carrierName}</span>
+                                <span className="text-[9px] opacity-75 mt-0.5 block">{timeStr} • {stopsStr}</span>
+                              </div>
+                              <div className="mt-auto">
+                                <span className="text-xs font-black block">₹{f.price.toLocaleString("en-IN")}</span>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    addExpense(`Flight: ${carrierName}`, "Flights", f.price * trip.travelers);
+                                    alert(`Added ${carrierName} flight expense allocation of Rs ${(f.price * trip.travelers).toLocaleString()} to Budget Ledger.`);
+                                  }}
+                                  className="mt-1 text-[8px] font-extrabold underline cursor-pointer hover:opacity-85"
+                                >
+                                  Select Carrier
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })
+                      ) : (
+                        <div className="col-span-2 py-6 text-center text-[10px] text-gray-400 italic border border-dashed border-gray-150 rounded-xl w-full">
+                          No flight deals found for this route.
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Hotel Rate Comparison Decks */}
               <div className="p-4 rounded-xl border border-gray-200 bg-white shadow-sm">

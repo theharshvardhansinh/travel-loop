@@ -76,6 +76,8 @@ export async function POST(request: Request) {
       { "departure": "09:00 PM", "arrival": "03:30 AM", "duration": "6h 30m", "price": 800, "label": "A/C Sleeper", "pill": "standard", "bus": "Intercity SmartBus" }
     For mode "car":
       { "departure": "Flexible departure", "arrival": "Flexible arrival", "duration": "~6h driving", "price": 4500, "label": "Self-Drive Rental", "pill": "budget", "car": "Sedan (Fuel + Toll)" }
+    For mode "bike":
+      { "departure": "Early morning kick-off (06:00 AM)", "arrival": "Late afternoon arrival (04:30 PM)", "duration": "~7h 30m scenic ride", "price": 1400, "label": "Cruiser / Tourer (Fuel)", "pill": "budget", "bike": "Royal Enfield / Cruiser" }
 
     Provide accurate, real-world estimated prices in Indian Rupees (INR) for the year 2026.
     Response must be ONLY valid JSON matching this format: { "options": [...] }. Do not add any markdown formatting, text, or explanations.`;
@@ -103,6 +105,11 @@ export async function POST(request: Request) {
         { departure: `${h}:00`, arrival: `${h + 2}:30`, duration: '2h 30m', price: 8500, label: 'Budget Saver', pill: 'budget', airline: 'IndiGo' },
         { departure: `${h + 1}:15`, arrival: `${h + 3}:30`, duration: '2h 15m', price: 12000, label: 'Standard Class', pill: 'standard', airline: 'SpiceJet' },
         { departure: `${h + 2}:00`, arrival: `${h + 4}:15`, duration: '2h 15m', price: 18500, label: 'Premium Cabin', pill: 'premium', airline: 'Vistara' },
+      ],
+      bike: [
+        { departure: '05:30 AM (Biker Dawn Ride)', arrival: '03:00 PM', duration: '~8h riding + pitstops', price: 1400, label: 'Self Cruiser / Tourer', pill: 'budget', bike: 'Fuel + Highway Tolls' },
+        { departure: '06:00 AM (Scenic Convoy)', arrival: '04:00 PM', duration: '~9h scenic pace', price: 2800, label: 'Royal Enfield Rental', pill: 'standard', bike: 'Himalayan 450 + Helmet Kit' },
+        { departure: 'Flexible departure', arrival: 'Flexible', duration: '~8h 30m', price: 4200, label: 'Super Tourer / Adventure', pill: 'premium', bike: 'BMW GS / KTM Adventure' },
       ],
       train: [
         { departure: `${h}:30`, arrival: `${h + 6}:00`, duration: '5h 30m', price: 1200, label: 'Sleeper Class', pill: 'budget', train: '12345 Express' },

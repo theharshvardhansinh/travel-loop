@@ -55,7 +55,7 @@ export default function Map({ activities, destination, centerCoords, isGeocoding
   const tileLayerRef = useRef<L.TileLayer | null>(null);
   const resizeObserverRef = useRef<ResizeObserver | null>(null);
 
-  const [mapLayer, setMapLayer] = React.useState<LayerKey>("voyager");
+  const [mapLayer, setMapLayer] = React.useState<LayerKey>("osm");
 
   // ─── Map initialisation + tile-layer swap + marker rendering ──────────────
   useEffect(() => {
@@ -195,7 +195,7 @@ export default function Map({ activities, destination, centerCoords, isGeocoding
           .bindPopup(popupContent, {
             closeButton: true,
             maxWidth: 220,
-            className: "tripmitra-popup",
+            className: "traveloop-popup",
           });
 
         markersRef.current.push(marker);
@@ -270,42 +270,23 @@ export default function Map({ activities, destination, centerCoords, isGeocoding
         </div>
       </div>
 
-      {/* ── Fix a: Voyager / Dark / OSM tile layer toggle — top-right (leaves
-           room for Leaflet zoom control buttons which are also top-right) */}
-      <div className="absolute top-4 right-14 z-[400] flex gap-1 bg-white/90 backdrop-blur-sm border border-gray-200 p-1 rounded-xl shadow-lg">
-        {(
-          [
-            { id: "voyager", label: "Voyager" },
-            { id: "dark",    label: "Dark"    },
-            { id: "osm",     label: "OSM"     },
-          ] as { id: LayerKey; label: string }[]
-        ).map((layer) => (
-          <button
-            key={layer.id}
-            type="button"
-            onClick={() => setMapLayer(layer.id)}
-            className={`px-2 py-1 rounded-lg text-[10px] font-bold tracking-wide transition-all ${
- mapLayer === layer.id
- ? "bg-teal-600 text-white shadow-sm"
- : "text-slate-600 hover:text-slate-800 hover:bg-gray-100"
- }`}
-          >
-            {layer.label}
-          </button>
-        ))}
+      {/* ── OpenStreetMap (OSM) Only Indicator ── */}
+      <div className="absolute top-4 right-14 z-[400] flex items-center gap-1.5 bg-white/95 border border-teal-200 px-3 py-1.5 rounded-xl shadow-md">
+        <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+        <span className="text-[10px] font-black text-slate-800">OpenStreetMap (OSM)</span>
       </div>
 
       {/* Popup styles — injected as a style tag so we stay SSR-safe */}
       <style>{`
-        .tripmitra-popup .leaflet-popup-content-wrapper {
+        .traveloop-popup .leaflet-popup-content-wrapper {
           border-radius: 12px;
           box-shadow: 0 4px 24px rgba(0,0,0,0.18);
           padding: 0;
         }
-        .tripmitra-popup .leaflet-popup-content {
+        .traveloop-popup .leaflet-popup-content {
           margin: 10px 12px;
         }
-        .tripmitra-popup .leaflet-popup-tip-container {
+        .traveloop-popup .leaflet-popup-tip-container {
           margin-top: -1px;
         }
       `}</style>

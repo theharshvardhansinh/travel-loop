@@ -11,6 +11,11 @@ export async function middleware(request: NextRequest) {
   if (
     pathname.startsWith('/_next') ||
     pathname.startsWith('/api/auth') ||
+    pathname.startsWith('/api/travel') ||
+    pathname.startsWith('/api/generate-itinerary') ||
+    pathname === '/' ||
+    pathname.startsWith('/planner') ||
+    pathname.startsWith('/share') ||
     pathname.includes('.')
   ) {
     return NextResponse.next();

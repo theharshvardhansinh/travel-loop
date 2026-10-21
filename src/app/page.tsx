@@ -7,20 +7,21 @@ import {
   Search, History, Trash2, Calendar, Users, 
   Globe, Star, Compass, ArrowRight, Sparkles, Navigation, 
   CloudSun, Landmark, Heart, Smile, Brain, Plane, Hotel, Coins,
-  UserPlus, Check, X
+  UserPlus, Check, X, Bike, Car, Train, Utensils, Fuel, Radar, ShieldCheck, Flame, Trees, Sparkle
 } from "lucide-react";
 import { 
   getMongoTrips, createMongoTrip, deleteMongoTrip,
   getMongoInvitations, respondToInvitation,
   getSearchHistory, saveSearchQuery, Trip
 } from "@/lib/store";
+import { RoadRouteResult, PitstopPlace } from "@/lib/roadRouteEngine";
 import ImageWithFallback from "@/components/ImageWithFallback";
 import ScrollReveal from "@/components/ScrollReveal";
 
 const getFlagEmoji = (dest: string) => {
   const d = dest.toLowerCase();
   if (d.includes("japan") || d.includes("kyoto") || d.includes("tokyo")) return "🇯🇵";
-  if (d.includes("india") || d.includes("goa") || d.includes("manali") || d.includes("varanasi") || d.includes("delhi") || d.includes("mumbai")) return "🇮🇳";
+  if (d.includes("india") || d.includes("goa") || d.includes("manali") || d.includes("varanasi") || d.includes("delhi") || d.includes("mumbai") || d.includes("rishikesh") || d.includes("jaipur")) return "🇮🇳";
   if (d.includes("france") || d.includes("paris")) return "🇫🇷";
   if (d.includes("italy") || d.includes("rome")) return "🇮🇹";
   if (d.includes("indonesia") || d.includes("bali")) return "🇮🇩";
@@ -39,12 +40,22 @@ export default function HomePage() {
   const heroOpacity = useTransform(scrollY, [0, 300], [1, 0.3]);
 
   // Form State
-  const [destination, setDestination] = useState("");
+  const [destination, setDestination] = useState("Goa");
   const [originCity, setOriginCity] = useState("Mumbai");
   const [dates, setDates] = useState("");
   const [endDate, setEndDate] = useState("");
   const [travelers, setTravelers] = useState(1);
-  const [budgetLimit, setBudgetLimit] = useState(50000);
+  const [budgetLimit, setBudgetLimit] = useState(25000);
+
+  // New Required Criteria States: Mode, Companions, Vibe
+  const [transportMode, setTransportMode] = useState<"bike" | "car" | "flight" | "train">("bike");
+  const [groupType, setGroupType] = useState<"solo" | "couple" | "friends" | "family">("solo");
+  const [tripVibe, setTripVibe] = useState<"spiritual" | "adventures" | "nature">("nature");
+
+  // Dynamic Road Route & 8 KM Highway Radar State
+  const [roadRoute, setRoadRoute] = useState<RoadRouteResult | null>(null);
+  const [loadingRoadRoute, setLoadingRoadRoute] = useState(false);
+  const [pitstopFilter, setPitstopFilter] = useState<"all" | "lunch" | "dinner" | "hotel">("all");
 
   // UI States
   const [history, setHistory] = useState<string[]>([]);
@@ -165,6 +176,38 @@ export default function HomePage() {
     }
   };
 
+  // Real-time Road Route & 8 KM Highway Radar Calculation
+  useEffect(() => {
+    let isMounted = true;
+    const fetchRouteInfo = async () => {
+      if (!destination.trim() || !originCity.trim()) return;
+      if (transportMode !== "bike" && transportMode !== "car") {
+        setRoadRoute(null);
+        return;
+      }
+      setLoadingRoadRoute(true);
+      try {
+        const res = await fetch(
+          `/api/travel/road-route?origin=${encodeURIComponent(originCity)}&destination=${encodeURIComponent(destination)}&mode=${transportMode}&tripVibe=${tripVibe}`
+        );
+        if (res.ok) {
+          const data: RoadRouteResult = await res.json();
+          if (isMounted) setRoadRoute(data);
+        }
+      } catch (err) {
+        console.warn("Could not calculate live road route:", err);
+      } finally {
+        if (isMounted) setLoadingRoadRoute(false);
+      }
+    };
+
+    const timer = setTimeout(fetchRouteInfo, 300);
+    return () => {
+      isMounted = false;
+      clearTimeout(timer);
+    };
+  }, [destination, originCity, transportMode, tripVibe]);
+
   // Voice Search Handler
   const handleVoiceSearch = () => {
     if (typeof window === "undefined") return;
@@ -237,6 +280,9 @@ export default function HomePage() {
       days: calculatedDays,
       travelers,
       budgetLimit,
+      transportMode,
+      groupType,
+      tripVibe,
     };
 
     try {
@@ -249,6 +295,9 @@ export default function HomePage() {
           travelers: tripParams.travelers,
           days: tripParams.days,
           budgetLimit: tripParams.budgetLimit,
+          transportMode: tripParams.transportMode,
+          groupType: tripParams.groupType,
+          tripVibe: tripParams.tripVibe,
         }),
       });
 
@@ -263,6 +312,12 @@ export default function HomePage() {
           days: data.generatedDays || 3,
           travelers: tripParams.travelers,
           budgetLimit: tripParams.budgetLimit,
+          transportMode: tripParams.transportMode,
+          groupType: tripParams.groupType,
+          tripVibe: tripParams.tripVibe,
+          routeDistanceKm: data.routeDistanceKm || roadRoute?.distanceKm,
+          routeDurationHours: data.routeDurationHours || roadRoute?.durationHours,
+          pitstops: data.pitstops || roadRoute?.allPitstops || [],
           itinerary: data.days || [],
         });
 
@@ -274,9 +329,9 @@ export default function HomePage() {
       const fallbackItinerary = [
         {
           dayNumber: 1,
-          theme: "Arrival & City Explorer",
+          theme: transportMode === "bike" ? "Scenic Highway Departure & Midway Lunch Dhaba" : "Arrival & City Explorer",
           activities: [
-            { id: "1", name: `${destination} City Gateway`, description: "Scenic landmark visit and orientation walk.", time: "Morning" }
+            { id: "1", name: `${destination} City Gateway`, description: `Scenic arrival route from ${originCity || 'origin'} towards ${destination}.`, time: "Morning" }
           ]
         }
       ];
@@ -288,6 +343,12 @@ export default function HomePage() {
           days: 3,
           travelers: tripParams.travelers,
           budgetLimit: tripParams.budgetLimit,
+          transportMode: tripParams.transportMode,
+          groupType: tripParams.groupType,
+          tripVibe: tripParams.tripVibe,
+          routeDistanceKm: roadRoute?.distanceKm,
+          routeDurationHours: roadRoute?.durationHours,
+          pitstops: roadRoute?.allPitstops || [],
           itinerary: fallbackItinerary,
         });
       if (newTrip) router.push(`/planner/${newTrip.id}`);
@@ -342,18 +403,18 @@ export default function HomePage() {
       </svg>
 
       {/* 1. HERO SECTION (2-COLUMN GRID) */}
-      <motion.section style={{ y: heroY, opacity: heroOpacity }} className="relative min-h-[60vh] py-8 md:py-14 flex flex-col lg:grid lg:grid-cols-12 gap-10 lg:gap-20 items-center text-left">
+      <motion.section style={{ y: heroY, opacity: heroOpacity }} className="relative min-h-[60vh] py-8 md:py-14 flex flex-col lg:grid lg:grid-cols-12 gap-10 lg:gap-14 items-start text-left">
         
-        {/* Left Column: Headline, Description, Search, Indicators */}
-        <div className="lg:col-span-7 flex flex-col items-start w-full pr-0 lg:pr-6">
+        {/* Left Column: Headline, Travel Mode, Companions, Vibe, Distance Radar */}
+        <div className="lg:col-span-7 flex flex-col items-start w-full pr-0 lg:pr-4">
           <motion.div
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5 }}
           >
-            <span className="inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full border border-teal-500/20 bg-teal-500/5 text-teal-700 text-[10px] font-extrabold tracking-widest uppercase mb-4">
+            <span className="inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full border border-teal-500/20 bg-teal-500/5 text-teal-700 text-[10px] font-extrabold tracking-widest uppercase mb-4 shadow-sm">
               <Sparkles className="w-3.5 h-3.5 text-teal-600" />
-              AI-Powered Travel Planning for Groups
+              Multi-Modal AI Travel Planning & Road Pitstop Radar
             </span>
           </motion.div>
 
@@ -361,85 +422,211 @@ export default function HomePage() {
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, delay: 0.05 }}
-            className="text-3xl md:text-5xl font-extrabold font-display leading-[1.1] tracking-tight text-slate-900 mb-4"
+            className="text-3xl md:text-5xl font-extrabold font-display leading-[1.12] tracking-tight text-slate-900 mb-4"
           >
-            Plan Trips Together. <br />
-            <span className="bg-gradient-to-r from-teal-600 via-teal-400 to-emerald-600 bg-clip-text text-transparent">
-              Flights, Hotels & Budgets
+            Plan Trips Your Way. <br />
+            <span className="bg-gradient-to-r from-teal-600 via-emerald-500 to-indigo-600 bg-clip-text text-transparent">
+              Bike, Car, Train & Flight
             </span> <br />
-            in One Place.
+            with 8 km Highway Radar.
           </motion.h1>
 
           <motion.p 
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, delay: 0.1 }}
-            className="text-slate-600 text-sm md:text-base lg:text-lg leading-relaxed mb-6 font-medium max-w-xl"
+            className="text-slate-600 text-sm md:text-base leading-relaxed mb-6 font-medium max-w-xl"
           >
-            Your AI Travel Copilot for Stress-Free Trips. Design dynamic route maps, compare flight options, organize budgets, and curate itineraries with friends in real-time.
+            Choose your ride, your squad, and your vibe. When traveling by bike or car, our engine calculates road distance and pinpoints curated <strong>Hotels, Lunch & Dinner dhabas strictly within 8 km</strong> of your highway corridor.
           </motion.p>
 
-          {/* Search Form */}
+          {/* Interactive Multi-Criteria Form */}
           <motion.div
             initial={{ opacity: 0, scale: 0.98 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ duration: 0.4, delay: 0.15 }}
-            className="w-full max-w-xl relative z-10 mb-4"
+            className="w-full relative z-10 mb-6"
           >
-            <form onSubmit={handleSearchSubmit} className="glass-panel border-gray-300/70 bg-[#FAF8F5]/95 p-3.5 rounded-2xl md:rounded-3xl shadow-soft flex flex-col gap-2.5">
-              <div className="flex items-center gap-2 relative w-full min-w-0">
-                <Search className="w-4.5 h-4.5 text-slate-500 ml-1.5 flex-shrink-0" />
-                <input
-                  type="text"
-                  value={destination}
-                  onChange={(e) => setDestination(e.target.value)}
-                  placeholder={`Where to? Try "${placeholderSuggestions[currentPlaceholderIdx]}"`}
-                  className="flex-1 min-w-0 bg-transparent py-2 text-sm md:text-[15px] font-medium text-[#221F1C] placeholder:text-[#64748b] placeholder:font-medium focus:outline-none"
-                  required
-                />
-                
-
-                <button
-                  type="submit"
-                  disabled={generating}
-                  className="bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 text-white font-extrabold text-xs md:text-sm px-4.5 py-2.5 md:px-5 md:py-3 rounded-xl transition-all duration-200 shadow-md hover:shadow-lg disabled:opacity-40 flex-shrink-0 flex items-center gap-1.5 group"
-                >
-                  {generating ? (
-                    <>
-                      <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                      <span>Analyzing...</span>
-                    </>
-                  ) : (
-                    <>
-                      <span className="hidden sm:inline">Start Planning Free</span>
-                      <span className="sm:hidden">Plan</span>
-                      <ArrowRight className="w-4 h-4 transform group-hover:translate-x-1 transition-transform" />
-                    </>
-                  )}
-                </button>
+            <form onSubmit={handleSearchSubmit} className="glass-panel border-gray-300/80 bg-[#FAF8F5]/95 p-4 md:p-5 rounded-2xl md:rounded-3xl shadow-xl flex flex-col gap-4">
+              
+              {/* SECTION 1: TRAVEL MODE */}
+              <div>
+                <label className="text-[10px] text-slate-500 font-extrabold uppercase tracking-wider block mb-2 flex items-center justify-between">
+                  <span className="flex items-center gap-1.5">
+                    <span className="w-4 h-4 rounded-full bg-teal-600 text-white flex items-center justify-center text-[9px] font-black">1</span>
+                    Select Travel Mode
+                  </span>
+                  <span className="text-[9px] font-bold text-teal-700 bg-teal-50 px-2 py-0.5 rounded-full border border-teal-200">
+                    {transportMode === "bike" ? "🏍️ Bike Road Trip Active" : transportMode === "car" ? "🚗 Car Road Trip Active" : transportMode === "train" ? "🚆 Railways Active" : "✈️ Flight Mode Active"}
+                  </span>
+                </label>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  {[
+                    { id: "bike", label: "Bike / Motorcycle", icon: Bike, desc: "Highway radar & pitstops", color: "teal" },
+                    { id: "car", label: "Car / Road Trip", icon: Car, desc: "Scenic driving route", color: "indigo" },
+                    { id: "flight", label: "Flight / Air", icon: Plane, desc: "Fast airline deals", color: "blue" },
+                    { id: "train", label: "Train / Rail", icon: Train, desc: "Scenic train journeys", color: "emerald" },
+                  ].map((mode) => {
+                    const Icon = mode.icon;
+                    const isSelected = transportMode === mode.id;
+                    return (
+                      <button
+                        key={mode.id}
+                        type="button"
+                        onClick={() => setTransportMode(mode.id as any)}
+                        className={`p-2.5 rounded-xl border text-left transition-all flex flex-col justify-between relative cursor-pointer ${
+                          isSelected
+                            ? "bg-teal-600 text-white border-teal-700 shadow-md ring-2 ring-teal-500/30 scale-[1.02]"
+                            : "bg-white/80 hover:bg-white text-slate-700 border-gray-200 hover:border-gray-300"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between mb-1.5">
+                          <Icon className={`w-5 h-5 ${isSelected ? "text-white" : "text-slate-600"}`} />
+                          {isSelected && <span className="w-2 h-2 rounded-full bg-emerald-300 animate-pulse" />}
+                        </div>
+                        <div>
+                          <div className={`text-xs font-black ${isSelected ? "text-white" : "text-slate-900"}`}>{mode.label}</div>
+                          <div className={`text-[9px] font-semibold mt-0.5 truncate ${isSelected ? "text-teal-100" : "text-slate-400"}`}>{mode.desc}</div>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
 
-              <div className="border-t border-gray-300/60 pt-2.5">
-                <div className="flex justify-between items-center flex-wrap gap-2">
+              {/* SECTION 2: WHO'S TRAVELING? (COMPANIONS) */}
+              <div>
+                <label className="text-[10px] text-slate-500 font-extrabold uppercase tracking-wider block mb-2 flex items-center gap-1.5">
+                  <span className="w-4 h-4 rounded-full bg-indigo-600 text-white flex items-center justify-center text-[9px] font-black">2</span>
+                  Who Is Traveling?
+                </label>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  {[
+                    { id: "solo", label: "Solo", emoji: "👤", desc: "Solo rider / traveler" },
+                    { id: "couple", label: "Couple", emoji: "💑", desc: "Romantic duo getaway" },
+                    { id: "friends", label: "Friends", emoji: "👥", desc: "Squad / Convoy group" },
+                    { id: "family", label: "Family", emoji: "👨‍👩‍👦", desc: "Family vacation" },
+                  ].map((g) => {
+                    const isSelected = groupType === g.id;
+                    return (
+                      <button
+                        key={g.id}
+                        type="button"
+                        onClick={() => {
+                          setGroupType(g.id as any);
+                          if (g.id === "solo") setTravelers(1);
+                          else if (g.id === "couple") setTravelers(2);
+                          else if (g.id === "friends" && travelers < 3) setTravelers(4);
+                        }}
+                        className={`p-2.5 rounded-xl border text-left transition-all flex items-center gap-2 cursor-pointer ${
+                          isSelected
+                            ? "bg-indigo-600 text-white border-indigo-700 shadow-md ring-2 ring-indigo-500/30 scale-[1.01]"
+                            : "bg-white/80 hover:bg-white text-slate-700 border-gray-200"
+                        }`}
+                      >
+                        <span className="text-xl">{g.emoji}</span>
+                        <div className="min-w-0">
+                          <div className={`text-xs font-black truncate ${isSelected ? "text-white" : "text-slate-900"}`}>{g.label}</div>
+                          <div className={`text-[8.5px] truncate font-semibold ${isSelected ? "text-indigo-100" : "text-slate-400"}`}>{g.desc}</div>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* SECTION 3: TRIP VIBE / CATEGORY */}
+              <div>
+                <label className="text-[10px] text-slate-500 font-extrabold uppercase tracking-wider block mb-2 flex items-center gap-1.5">
+                  <span className="w-4 h-4 rounded-full bg-amber-600 text-white flex items-center justify-center text-[9px] font-black">3</span>
+                  Trip Vibe & Style
+                </label>
+                <div className="grid grid-cols-3 gap-2">
+                  {[
+                    { id: "spiritual", label: "Spiritual", emoji: "🪔", desc: "Temples & sacred ghats", border: "border-amber-300" },
+                    { id: "adventures", label: "Adventures", emoji: "🧗", desc: "Treks, trails & thrills", border: "border-rose-300" },
+                    { id: "nature", label: "Nature", emoji: "🌲", desc: "Valleys, lakes & waterfalls", border: "border-emerald-300" },
+                  ].map((v) => {
+                    const isSelected = tripVibe === v.id;
+                    return (
+                      <button
+                        key={v.id}
+                        type="button"
+                        onClick={() => setTripVibe(v.id as any)}
+                        className={`p-2.5 rounded-xl border text-left transition-all flex flex-col justify-between cursor-pointer ${
+                          isSelected
+                            ? "bg-slate-900 text-white border-slate-950 shadow-md ring-2 ring-slate-800/30 scale-[1.01]"
+                            : "bg-white/80 hover:bg-white text-slate-700 border-gray-200"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-xl">{v.emoji}</span>
+                          {isSelected && <span className="w-2 h-2 rounded-full bg-teal-400 animate-pulse" />}
+                        </div>
+                        <div>
+                          <div className={`text-xs font-black ${isSelected ? "text-white" : "text-slate-900"}`}>{v.label}</div>
+                          <div className={`text-[8.5px] truncate font-semibold mt-0.5 ${isSelected ? "text-slate-300" : "text-slate-400"}`}>{v.desc}</div>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* SECTION 4: ORIGIN & DESTINATION INPUTS */}
+              <div className="pt-2 border-t border-gray-200/70">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+                  {/* Origin */}
+                  <div className="relative">
+                    <label className="text-[9px] text-slate-500 font-extrabold uppercase tracking-wider block mb-1">Starting Origin City</label>
+                    <div className="flex items-center gap-2 bg-white px-3 py-2.5 rounded-xl border border-gray-200 shadow-inner">
+                      <Navigation className="w-4 h-4 text-teal-600 flex-shrink-0" />
+                      <input
+                        type="text"
+                        value={originCity}
+                        onChange={(e) => setOriginCity(e.target.value)}
+                        placeholder="e.g. Mumbai, Delhi, Bangalore"
+                        className="w-full bg-transparent text-xs md:text-sm font-bold text-slate-800 placeholder:text-slate-400 focus:outline-none"
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  {/* Destination */}
+                  <div className="relative">
+                    <label className="text-[9px] text-slate-500 font-extrabold uppercase tracking-wider block mb-1">Where To Destination?</label>
+                    <div className="flex items-center gap-2 bg-white px-3 py-2.5 rounded-xl border border-gray-200 shadow-inner">
+                      <Search className="w-4 h-4 text-indigo-600 flex-shrink-0" />
+                      <input
+                        type="text"
+                        value={destination}
+                        onChange={(e) => setDestination(e.target.value)}
+                        placeholder="e.g. Goa, Manali, Jaipur, Rishikesh"
+                        className="w-full bg-transparent text-xs md:text-sm font-bold text-slate-800 placeholder:text-slate-400 focus:outline-none"
+                        required
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Advanced Dates & Budget Toggle */}
+                <div className="mt-3 flex justify-between items-center flex-wrap gap-2">
                   <div className="flex gap-4">
                     <button
                       type="button"
                       onClick={() => setShowAdvanced(!showAdvanced)}
-                      className="text-[10px] font-bold text-teal-800 hover:text-teal-950 transition-colors uppercase tracking-wider"
+                      className="text-[10px] font-extrabold text-teal-800 hover:text-teal-950 transition-colors uppercase tracking-wider flex items-center gap-1"
                     >
-                      {showAdvanced ? "▼ Simple Search" : "▲ Customize Dates & Budget"}
+                      {showAdvanced ? "▼ Simple Dates" : "▲ Customize Dates, Travelers & Budget"}
                     </button>
                     <button
                       type="button"
                       onClick={() => router.push("/compare")}
-                      className="text-[10px] font-bold text-indigo-700 hover:text-indigo-950 transition-colors uppercase tracking-wider flex items-center gap-1"
+                      className="text-[10px] font-extrabold text-indigo-700 hover:text-indigo-950 transition-colors uppercase tracking-wider flex items-center gap-1"
                     >
                       ⚖️ Compare Destinations
                     </button>
                   </div>
-                  <p className="hidden sm:block text-[9px] text-[#64748b] font-bold uppercase tracking-wider">
-                    Examples: &ldquo;Kyoto under ₹90k&rdquo;
-                  </p>
                 </div>
 
                 <AnimatePresence>
@@ -448,106 +635,224 @@ export default function HomePage() {
                       initial={{ height: 0, opacity: 0 }}
                       animate={{ height: "auto", opacity: 1 }}
                       exit={{ height: 0, opacity: 0 }}
-                      className="overflow-hidden mt-2.5 grid grid-cols-2 md:grid-cols-5 gap-2.5 text-left"
+                      className="overflow-hidden mt-2.5 grid grid-cols-2 md:grid-cols-4 gap-2 text-left"
                     >
                       <div>
-                        <label className="text-[9px] text-gray-400 font-bold uppercase tracking-wider block mb-1">Departure</label>
-                        <input
-                          type="text"
-                          value={originCity}
-                          onChange={(e) => setOriginCity(e.target.value)}
-                          placeholder="Mumbai"
-                          className="w-full glass-input px-3 py-2 rounded-xl text-xs focus:outline-none"
-                        />
-                      </div>
-                      <div>
-                        <label className="text-[9px] text-gray-400 font-bold uppercase tracking-wider block mb-1">Start Date</label>
+                        <label className="text-[9px] text-gray-500 font-bold uppercase tracking-wider block mb-1">Start Date</label>
                         <input
                           type="date"
                           value={dates}
                           onChange={(e) => setDates(e.target.value)}
-                          className="w-full glass-input px-3 py-2 rounded-xl text-xs focus:outline-none"
+                          className="w-full glass-input px-3 py-2 rounded-xl text-xs font-semibold focus:outline-none bg-white border border-gray-200"
                         />
                       </div>
                       <div>
-                        <label className="text-[9px] text-gray-400 font-bold uppercase tracking-wider block mb-1">End Date</label>
+                        <label className="text-[9px] text-gray-500 font-bold uppercase tracking-wider block mb-1">End Date</label>
                         <input
                           type="date"
                           value={endDate}
                           min={dates}
                           onChange={(e) => setEndDate(e.target.value)}
-                          className="w-full glass-input px-3 py-2 rounded-xl text-xs focus:outline-none"
+                          className="w-full glass-input px-3 py-2 rounded-xl text-xs font-semibold focus:outline-none bg-white border border-gray-200"
                         />
                       </div>
                       <div>
-                        <label className="text-[9px] text-gray-400 font-bold uppercase tracking-wider block mb-1">Travelers</label>
+                        <label className="text-[9px] text-gray-500 font-bold uppercase tracking-wider block mb-1">Travelers Count</label>
                         <input
                           type="number"
                           min={1}
+                          max={20}
                           value={travelers}
                           onChange={(e) => setTravelers(Number(e.target.value))}
-                          className="w-full glass-input px-3 py-2 rounded-xl text-xs focus:outline-none"
+                          className="w-full glass-input px-3 py-2 rounded-xl text-xs font-semibold focus:outline-none bg-white border border-gray-200"
                         />
                       </div>
                       <div>
-                        <label className="text-[9px] text-gray-400 font-bold uppercase tracking-wider block mb-1">Budget (Rs)</label>
+                        <label className="text-[9px] text-gray-500 font-bold uppercase tracking-wider block mb-1">Budget Limit (₹)</label>
                         <input
                           type="number"
+                          step={1000}
                           value={budgetLimit}
                           onChange={(e) => setBudgetLimit(Number(e.target.value))}
-                          className="w-full glass-input px-3 py-2 rounded-xl text-xs focus:outline-none"
+                          className="w-full glass-input px-3 py-2 rounded-xl text-xs font-semibold focus:outline-none bg-white border border-gray-200"
                         />
                       </div>
                     </motion.div>
                   )}
                 </AnimatePresence>
               </div>
+
+              {/* Submit CTA */}
+              <div className="pt-2">
+                <button
+                  type="submit"
+                  disabled={generating}
+                  className="w-full bg-gradient-to-r from-teal-600 via-emerald-600 to-indigo-600 hover:from-teal-700 hover:to-indigo-700 text-white font-black text-sm md:text-base py-3.5 px-6 rounded-xl transition-all duration-200 shadow-lg hover:shadow-xl disabled:opacity-40 flex items-center justify-center gap-2 group cursor-pointer"
+                >
+                  {generating ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      <span>Creating {transportMode.toUpperCase()} {tripVibe.toUpperCase()} Itinerary & Pitstop Radar...</span>
+                    </>
+                  ) : (
+                    <>
+                      <span>Generate {transportMode === "bike" ? "🏍️ Bike Road Trip" : transportMode === "car" ? "🚗 Car Road Trip" : transportMode === "train" ? "🚆 Train Itinerary" : "✈️ Flight Trip"} ({tripVibe})</span>
+                      <ArrowRight className="w-4 h-4 transform group-hover:translate-x-1.5 transition-transform" />
+                    </>
+                  )}
+                </button>
+              </div>
             </form>
           </motion.div>
 
-          {/* Trust Indicators */}
-          <motion.div 
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.2 }}
-            className="flex flex-wrap gap-x-4 gap-y-1.5 text-[11px] font-bold text-slate-500 mb-6 pl-1 justify-start"
-          >
-            <span className="flex items-center gap-1 text-slate-650">✓ 10,000+ trips planned</span>
-            <span className="flex items-center gap-1 text-slate-650">✓ Real-time flight data</span>
-            <span className="flex items-center gap-1 text-slate-650">✓ AI itinerary workspace</span>
-            <span className="flex items-center gap-1 text-slate-650">✓ Collaborative planning</span>
-          </motion.div>
+          {/* DYNAMIC ROAD TRIP & 8 KM RADAR PREVIEW (WHEN BIKE OR CAR ACTIVE) */}
+          {(transportMode === "bike" || transportMode === "car") && (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="w-full mb-6 p-4 rounded-2xl border border-teal-500/20 bg-teal-500/5 shadow-sm text-left"
+            >
+              {/* Radar Distance Header */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-teal-500/15">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
+                    <span className="text-[11px] font-black uppercase tracking-wider text-teal-800">
+                      🛣️ Calculated Road Distance: {originCity} ➔ {destination}
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-700 font-bold mt-1">
+                    {loadingRoadRoute ? (
+                      <span className="animate-pulse">Computing road distance & scanning 8 km corridor...</span>
+                    ) : (
+                      <>
+                        <span className="text-sm font-black text-slate-900">{roadRoute?.distanceKm || 585} KM</span>
+                        <span className="text-slate-500 font-medium ml-2">• ~{roadRoute?.durationText || (transportMode === "bike" ? "11h 15m ride" : "9h 30m drive")}</span>
+                        <span className="text-slate-500 font-medium ml-2">• Est. Fuel: ~₹{roadRoute?.fuelEstimatedCost?.toLocaleString() || "1,920"}</span>
+                      </>
+                    )}
+                  </p>
+                </div>
+                <div className="flex items-center gap-1.5 bg-white px-2.5 py-1.5 rounded-xl border border-teal-500/20 shadow-xs">
+                  <Radar className="w-4 h-4 text-teal-600 animate-spin" style={{ animationDuration: "6s" }} />
+                  <span className="text-[10px] font-extrabold text-teal-800 uppercase tracking-wider">
+                    8 KM Corridor Radar Active
+                  </span>
+                </div>
+              </div>
 
-          {/* Recent Destination Chips */}
-          <motion.div 
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.25 }}
-            className="flex flex-wrap gap-1.5 items-center"
-          >
+              {/* Requirement spotlight note */}
+              <div className="mt-2.5 flex items-center gap-1.5 text-[10px] font-bold text-slate-600">
+                <ShieldCheck className="w-3.5 h-3.5 text-teal-600 flex-shrink-0" />
+                <span>Showing recommended <strong>Hotels, Lunch & Dinner dhabas strictly within 8 km</strong> of your highway route:</span>
+              </div>
+
+              {/* Filter Tabs for 8km Radar */}
+              <div className="flex flex-wrap gap-1.5 mt-3">
+                {[
+                  { id: "all", label: `All Pitstops (${roadRoute?.allPitstops?.length || 6})` },
+                  { id: "lunch", label: `🍲 Lunch Spots (${roadRoute?.lunchStops?.length || 2})` },
+                  { id: "dinner", label: `🍽️ Dinner Spots (${roadRoute?.dinnerStops?.length || 2})` },
+                  { id: "hotel", label: `🏨 Night Hotels (${roadRoute?.hotelsAlongRoute?.length || 2})` },
+                ].map((tab) => (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => setPitstopFilter(tab.id as any)}
+                    className={`px-3 py-1 rounded-full text-[10px] font-extrabold transition-all cursor-pointer ${
+                      pitstopFilter === tab.id
+                        ? "bg-teal-600 text-white shadow-xs"
+                        : "bg-white text-slate-600 hover:bg-slate-100 border border-gray-200"
+                    }`}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* Pitstops Cards Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 mt-3">
+                {(() => {
+                  const list = pitstopFilter === "lunch" 
+                    ? roadRoute?.lunchStops || []
+                    : pitstopFilter === "dinner"
+                    ? roadRoute?.dinnerStops || []
+                    : pitstopFilter === "hotel"
+                    ? roadRoute?.hotelsAlongRoute || []
+                    : roadRoute?.allPitstops?.slice(0, 4) || [];
+
+                  if (list.length === 0) {
+                    return (
+                      <div className="col-span-2 py-4 text-center text-xs text-slate-400 italic">
+                        Scanning 8 km corridor along the route...
+                      </div>
+                    );
+                  }
+
+                  return list.map((stop, idx) => (
+                    <div
+                      key={stop.id || idx}
+                      className="p-3 rounded-xl bg-white border border-gray-200/80 shadow-xs flex flex-col justify-between text-left hover:border-teal-500/40 transition-colors"
+                    >
+                      <div>
+                        <div className="flex items-center justify-between gap-1 mb-1">
+                          <span className={`text-[8.5px] font-black uppercase px-2 py-0.5 rounded-full ${
+                            stop.type === "lunch"
+                              ? "bg-amber-100 text-amber-800"
+                              : stop.type === "dinner"
+                              ? "bg-indigo-100 text-indigo-800"
+                              : "bg-emerald-100 text-emerald-800"
+                          }`}>
+                            {stop.type === "lunch" ? "🍲 LUNCH STOP" : stop.type === "dinner" ? "🍽️ DINNER STOP" : "🏨 NIGHT HOTEL"} • Km {stop.atKm}
+                          </span>
+                          <span className="text-[8.5px] font-extrabold text-teal-700 bg-teal-50 px-1.5 py-0.5 rounded border border-teal-200">
+                            📍 {stop.distanceFromRouteKm} km off NH (≤ 8 km)
+                          </span>
+                        </div>
+                        <h5 className="text-xs font-black text-slate-900 truncate">{stop.name}</h5>
+                        <p className="text-[10px] text-slate-600 line-clamp-2 mt-0.5 leading-relaxed">{stop.description}</p>
+                      </div>
+
+                      <div className="mt-2 pt-2 border-t border-gray-100 flex items-center justify-between text-[9.5px]">
+                        <span className="font-bold text-slate-700">⭐ {stop.rating} • {stop.pricePerPerson ? `₹${stop.pricePerPerson}/meal` : `₹${stop.pricePerNight}/night`}</span>
+                        <span className="font-extrabold text-teal-700 truncate max-w-[140px]">{stop.highlight}</span>
+                      </div>
+                    </div>
+                  ));
+                })()}
+              </div>
+            </motion.div>
+          )}
+
+          {/* Quick Route Suggestions */}
+          <div className="flex flex-wrap gap-1.5 items-center">
             <span className="text-[10px] text-slate-450 font-bold uppercase tracking-wider flex items-center gap-1 mr-1">
-              <History className="w-3.5 h-3.5" /> Try:
+              <History className="w-3.5 h-3.5" /> Popular routes:
             </span>
             {[
-              { label: "🏖️ Goa", query: "Goa" },
-              { label: "🌸 Kyoto", query: "Kyoto" },
-              { label: "🏔️ Manali", query: "Manali" },
-              { label: "🕌 Varanasi", query: "Varanasi" }
-            ].map((chip, idx) => (
+              { origin: "Mumbai", dest: "Goa", label: "🏍️ Mumbai ➔ Goa (NH66)" },
+              { origin: "Delhi", dest: "Manali", label: "🏍️ Delhi ➔ Manali (NH44)" },
+              { origin: "Delhi", dest: "Jaipur", label: "🚗 Delhi ➔ Jaipur (NH48)" },
+              { origin: "Delhi", dest: "Rishikesh", label: "🪔 Delhi ➔ Rishikesh (Spiritual)" },
+              { origin: "Bangalore", dest: "Ooty", label: "🌲 Bangalore ➔ Ooty (Nature)" },
+            ].map((route, idx) => (
               <button
                 key={idx}
                 type="button"
-                onClick={() => setDestination(chip.query)}
-                className="px-2.5 py-1 rounded-full border border-gray-200 bg-white hover:border-teal-500/30 hover:bg-teal-500/5 text-[11px] text-slate-700 font-semibold transition-all duration-200 flex items-center gap-1 shadow-sm"
+                onClick={() => {
+                  setOriginCity(route.origin);
+                  setDestination(route.dest);
+                }}
+                className="px-2.5 py-1 rounded-full border border-gray-200 bg-white hover:border-teal-500/30 hover:bg-teal-500/5 text-[10.5px] text-slate-700 font-semibold transition-all duration-200 flex items-center gap-1 shadow-sm"
               >
-                {chip.label}
+                {route.label}
               </button>
             ))}
-          </motion.div>
+          </div>
         </div>
 
-        {/* Right Column: Interactive Trip Preview / Dashboard Mockup */}
-        <div className="lg:col-span-5 w-full flex justify-center lg:justify-end relative mt-8 lg:mt-0 pr-0 lg:pr-4">
+        {/* Right Column: Interactive Trip Preview / Dynamic Route Mockup */}
+        <div className="lg:col-span-5 w-full flex justify-center lg:justify-end relative mt-8 lg:mt-0 pr-0 lg:pr-2">
           {/* Floating pins behind the mockup */}
           <div className="absolute top-4 left-6 text-2xl animate-float-pin opacity-70" style={{ animationDelay: "0s" }}>📍</div>
           <div className="absolute bottom-10 right-4 text-2xl animate-float-pin opacity-70" style={{ animationDelay: "1.5s" }}>📍</div>
@@ -559,129 +864,159 @@ export default function HomePage() {
             animate={{ opacity: 1, scale: 1 }}
             transition={{ duration: 0.5, delay: 0.2 }}
             onClick={handlePreviewClick}
-            className={`w-full max-w-[480px] rounded-3xl border border-gray-200/60 bg-[#FAF8F5]/85 backdrop-blur-md p-6 shadow-xl relative overflow-hidden flex flex-col gap-4.5 text-left ${latestTrip ? "cursor-pointer hover:border-teal-500/30 transition-all duration-355" : ""}`}
+            className={`w-full max-w-[480px] rounded-3xl border border-gray-200/70 bg-[#FAF8F5]/90 backdrop-blur-md p-5 md:p-6 shadow-xl relative overflow-hidden flex flex-col gap-4 text-left ${latestTrip ? "cursor-pointer hover:border-teal-500/40 transition-all duration-300" : ""}`}
           >
             {/* Mockup Header */}
             <div className="flex justify-between items-center pb-3 border-b border-gray-200/50">
               <div>
                 <div className="flex items-center gap-1.5">
-                  <span className="text-lg">{previewFlag}</span>
-                  <h4 className="text-base font-black text-slate-900 font-display">{previewDest}</h4>
+                  <span className="text-xl">
+                    {transportMode === "bike" ? "🏍️" : transportMode === "car" ? "🚗" : transportMode === "train" ? "🚆" : "✈️"}
+                  </span>
+                  <h4 className="text-base font-black text-slate-900 font-display">
+                    {originCity} ➔ {destination}
+                  </h4>
                 </div>
-                <p className="text-[11px] text-slate-500 font-bold uppercase tracking-wider mt-0.5">
-                  {latestTrip ? "Last Planned Trip" : "Spring Break"} • {previewDays} Days
+                <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mt-0.5">
+                  {transportMode.toUpperCase()} TOUR • {groupType.toUpperCase()} • {tripVibe.toUpperCase()}
                 </p>
               </div>
               
-              {/* Collaborators Stack */}
-              <div className="flex items-center relative pr-2">
-                <div className="w-8 h-8 rounded-full bg-teal-600 text-white font-black text-xs flex items-center justify-center border border-white shadow-sm">A</div>
-                <div className="w-8 h-8 rounded-full bg-coral-500 text-white font-black text-xs flex items-center justify-center border border-white -ml-2.5 shadow-sm">B</div>
-                <div className="w-8 h-8 rounded-full bg-emerald-600 text-white font-black text-xs flex items-center justify-center border border-white -ml-2.5 shadow-sm">C</div>
-                <span className="absolute bottom-0 right-1 w-2.5 h-2.5 bg-green-500 rounded-full border border-white animate-pulse" />
+              <div className="text-right">
+                <span className="text-[10px] font-extrabold text-teal-700 bg-teal-50 border border-teal-200 px-2 py-0.5 rounded-full">
+                  {roadRoute?.distanceKm ? `${roadRoute.distanceKm} KM` : "LIVE ROUTE"}
+                </span>
               </div>
             </div>
 
-            {/* Layered Cards */}
-            <div className="flex flex-col gap-3.5 relative z-10">
-              {/* 1. Map Route Segment */}
+            {/* Layered Route & Pitstop Cards */}
+            <div className="flex flex-col gap-3 relative z-10">
+              {/* 1. Road Route Segment */}
               <motion.div
                 initial={{ opacity: 0, x: 20 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: 0.3 }}
-                className="bg-white/90 p-3.5 rounded-2xl border border-gray-200/60 shadow-sm flex flex-col gap-2 relative overflow-hidden"
+                className="bg-white/95 p-3.5 rounded-2xl border border-gray-200/70 shadow-sm flex flex-col gap-2 relative overflow-hidden"
               >
                 <div className="flex justify-between items-center">
-                  <span className="text-[10px] font-bold text-teal-750 bg-teal-500/10 px-2.5 py-0.5 rounded-full uppercase tracking-wider">Itinerary Route</span>
-                  <span className="text-[10px] font-bold text-slate-400">Day 1 Segment</span>
+                  <span className="text-[9.5px] font-extrabold text-teal-800 bg-teal-500/10 px-2.5 py-0.5 rounded-full uppercase tracking-wider">
+                    {transportMode === "bike" ? "Motorcycle Route Map" : transportMode === "car" ? "Road Trip Route Map" : "Transit Segment"}
+                  </span>
+                  <span className="text-[9.5px] font-bold text-slate-400">
+                    {roadRoute?.durationText ? `~${roadRoute.durationText}` : "Day 1 Road"}
+                  </span>
                 </div>
+
                 <div className="h-20 w-full rounded-xl bg-slate-50 border border-gray-100 flex items-center justify-center p-2 relative overflow-hidden">
                   <svg className="absolute left-[29px] right-[29px] top-[25px] h-2 w-[calc(100%-58px)] overflow-visible pointer-events-none" viewBox="0 0 100 8" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
                     <path d="M 0,4 Q 50,0 100,4" fill="none" stroke="rgba(20, 110, 120, 0.2)" strokeWidth="3" strokeLinecap="round" />
                     <path d="M 0,4 Q 50,0 100,4" fill="none" stroke="#0f766e" strokeWidth="1.5" strokeDasharray="4 3" className="animate-route-dash" strokeLinecap="round" />
                     <g>
-                      <path 
-                        d="M-5,-3.5 L4.5,0 L-5,3.5 L-2.5,0 Z" 
-                        fill="#0f766e" 
-                      />
-                      <animateMotion 
-                        dur="3.2s" 
-                        repeatCount="indefinite" 
-                        rotate="auto"
-                        path="M 0,4 Q 50,0 100,4"
-                      />
+                      <path d="M-5,-3.5 L4.5,0 L-5,3.5 L-2.5,0 Z" fill="#0f766e" />
+                      <animateMotion dur="3.2s" repeatCount="indefinite" rotate="auto" path="M 0,4 Q 50,0 100,4" />
                     </g>
                   </svg>
                   <div className="absolute left-6 top-6 flex flex-col items-center">
                     <span className="w-2.5 h-2.5 bg-teal-600 rounded-full ring-4 ring-teal-500/20" />
-                    <span className="text-[9px] font-bold text-slate-700 mt-1 max-w-[80px] truncate">{stop1}</span>
+                    <span className="text-[9px] font-bold text-slate-700 mt-1 max-w-[80px] truncate">{originCity}</span>
+                  </div>
+                  {/* Midway Lunch Pin */}
+                  <div className="absolute left-1/2 top-4 -translate-x-1/2 flex flex-col items-center">
+                    <span className="text-[10px]">🍲</span>
+                    <span className="text-[8px] font-extrabold text-amber-700 bg-amber-50 px-1 rounded">Lunch Stop (≤8km)</span>
                   </div>
                   <div className="absolute right-6 top-6 flex flex-col items-center">
                     <span className="w-2.5 h-2.5 bg-emerald-600 rounded-full ring-4 ring-emerald-500/20" />
-                    <span className="text-[9px] font-bold text-slate-700 mt-1 max-w-[80px] truncate">{stop2}</span>
+                    <span className="text-[9px] font-bold text-slate-700 mt-1 max-w-[80px] truncate">{destination}</span>
                   </div>
                 </div>
               </motion.div>
 
-              {/* 2. Flight Card */}
+              {/* 2. Recommended Lunch Dhaba Card (8 km Radar) */}
               <motion.div
                 initial={{ opacity: 0, x: 20 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: 0.45 }}
-                className="bg-white/90 p-3.5 rounded-2xl border border-gray-200/60 shadow-sm flex items-center justify-between gap-3"
+                className="bg-white/95 p-3 rounded-2xl border border-amber-200/80 shadow-sm flex items-center justify-between gap-3"
               >
-                <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-xl bg-teal-500/10 border border-teal-500/20 flex items-center justify-center text-teal-600">
-                    <Plane className="w-[18px] h-[18px] transform rotate-45" />
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="w-9 h-9 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-700 text-lg flex-shrink-0">
+                    🍲
                   </div>
-                  <div>
-                    <h5 className="text-xs font-extrabold text-slate-800 uppercase tracking-wider">{previewOrigin.substring(0, 8)} ⇄ {previewDest.split(",")[0].substring(0, 8)}</h5>
-                    <p className="text-[10px] text-slate-505 font-bold mt-0.5">{latestTrip ? "Best Route Deal" : "ANA NH-828 • Direct"}</p>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[8.5px] font-extrabold text-amber-800 bg-amber-100 px-1.5 py-0.2 rounded uppercase">
+                        Recommended Lunch
+                      </span>
+                      <span className="text-[8px] font-bold text-teal-700 bg-teal-50 px-1 rounded">
+                        {roadRoute?.lunchStops?.[0]?.distanceFromRouteKm ? `${roadRoute.lunchStops[0].distanceFromRouteKm} km off NH` : "0.8 km off NH"}
+                      </span>
+                    </div>
+                    <h5 className="text-xs font-black text-slate-800 truncate mt-0.5">
+                      {roadRoute?.lunchStops?.[0]?.name || "Old Rao Highway Dhaba & Rest"}
+                    </h5>
+                    <p className="text-[9.5px] text-slate-500 truncate">
+                      {roadRoute?.lunchStops?.[0]?.highlight || "Famous Tandoori Parathas & Kulhad Chai"}
+                    </p>
                   </div>
                 </div>
-                <div className="text-right">
-                  <p className="text-sm font-black text-emerald-600">₹{flightPrice.toLocaleString("en-IN")}</p>
-                  <p className="text-[9px] text-teal-755 bg-teal-500/10 px-1.5 py-0.5 rounded-full font-bold mt-1 uppercase tracking-wider">✓ Selected</p>
+                <div className="text-right flex-shrink-0">
+                  <p className="text-xs font-black text-amber-800">₹{roadRoute?.lunchStops?.[0]?.pricePerPerson || 320}/meal</p>
+                  <p className="text-[8.5px] text-emerald-700 font-extrabold mt-0.5">⭐ {roadRoute?.lunchStops?.[0]?.rating || 4.6}</p>
                 </div>
               </motion.div>
 
-              {/* 3. Hotel Card */}
+              {/* 3. Recommended Dinner & Hotel Card */}
               <motion.div
                 initial={{ opacity: 0, x: 20 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: 0.6 }}
-                className="bg-white/90 p-3.5 rounded-2xl border border-gray-200/60 shadow-sm flex items-center justify-between gap-3"
+                className="bg-white/95 p-3 rounded-2xl border border-indigo-200/80 shadow-sm flex items-center justify-between gap-3"
               >
-                <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-600">
-                    <Hotel className="w-[18px] h-[18px]" />
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="w-9 h-9 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-700 text-lg flex-shrink-0">
+                    🍽️
                   </div>
-                  <div>
-                    <h5 className="text-xs font-extrabold text-slate-800 uppercase tracking-wider">
-                      {latestTrip ? `${previewDest.split(",")[0]} Lodge` : "Park Hyatt Tokyo"}
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[8.5px] font-extrabold text-indigo-800 bg-indigo-100 px-1.5 py-0.2 rounded uppercase">
+                        Dinner & Stay Stop
+                      </span>
+                      <span className="text-[8px] font-bold text-teal-700 bg-teal-50 px-1 rounded">
+                        {roadRoute?.dinnerStops?.[0]?.distanceFromRouteKm ? `${roadRoute.dinnerStops[0].distanceFromRouteKm} km from route` : "1.8 km off NH"}
+                      </span>
+                    </div>
+                    <h5 className="text-xs font-black text-slate-800 truncate mt-0.5">
+                      {roadRoute?.dinnerStops?.[0]?.name || "Toran Royal Haveli Highway Diner"}
                     </h5>
-                    <p className="text-[10px] text-slate-505 font-bold mt-0.5">★ 4.8 curated ratings</p>
+                    <p className="text-[9.5px] text-slate-500 truncate">
+                      {roadRoute?.hotelsAlongRoute?.[0]?.name || "Safe Bike Parking & Rider Hot Showers"}
+                    </p>
                   </div>
                 </div>
-                <div className="text-right">
-                  <p className="text-sm font-black text-emerald-600">₹{hotelPrice.toLocaleString("en-IN")}/n</p>
-                  <p className="text-[9px] text-teal-755 font-bold mt-1 uppercase tracking-wider">Saved to Deck</p>
+                <div className="text-right flex-shrink-0">
+                  <p className="text-xs font-black text-indigo-800">₹{roadRoute?.dinnerStops?.[0]?.pricePerPerson || 480}/meal</p>
+                  <p className="text-[8.5px] text-emerald-700 font-extrabold mt-0.5">⭐ {roadRoute?.dinnerStops?.[0]?.rating || 4.7}</p>
                 </div>
               </motion.div>
 
-              {/* 4. Budget Tracking Card */}
+              {/* 4. Budget & Fuel Tracker */}
               <motion.div
                 initial={{ opacity: 0, x: 20 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: 0.75 }}
-                className="bg-white/90 p-3.5 rounded-2xl border border-gray-200/60 shadow-sm flex justify-between items-center gap-3"
+                className="bg-white/95 p-3 rounded-2xl border border-gray-200/70 shadow-sm flex justify-between items-center gap-3"
               >
                 <div>
-                  <h5 className="text-xs font-extrabold text-slate-800 uppercase tracking-wider">Expense Tracker</h5>
-                  <p className="text-[11px] text-slate-505 font-bold mt-0.5">Spent: ₹{totalSpent.toLocaleString("en-IN")} / ₹{totalBudget.toLocaleString("en-IN")}</p>
+                  <h5 className="text-xs font-extrabold text-slate-800 uppercase tracking-wider">
+                    {transportMode === "bike" ? "🏍️ Bike Fuel & Road Ledger" : "Expense & Budget Tracker"}
+                  </h5>
+                  <p className="text-[10px] text-slate-500 font-bold mt-0.5">
+                    Est. Fuel: ~₹{roadRoute?.fuelEstimatedCost?.toLocaleString() || "1,920"} • Budget: ₹{budgetLimit.toLocaleString()}
+                  </p>
                 </div>
-                <div className="w-10 h-10 rounded-full flex items-center justify-center relative shadow-inner" style={{ background: `conic-gradient(#0f766e ${spentPct}%, #e2e8f0 ${spentPct}% 100%)` }}>
-                  <div className="w-8 h-8 bg-white rounded-full flex items-center justify-center text-xs font-black text-[#221F1C]">{spentPct}%</div>
+                <div className="w-9 h-9 rounded-full flex items-center justify-center bg-teal-600 text-white font-black text-xs shadow-md">
+                  ✓
                 </div>
               </motion.div>
             </div>
